@@ -641,7 +641,7 @@ async function secaoWhatsApp(raiz) {
     botao.disabled = true; botao.textContent = 'Enviando…';
     const r = await chamar(window.api.whatsapp.teste({ tipo, texto: texto.value }));
     botao.disabled = false; botao.textContent = rotulo;
-    if (r) avisoOk(`Mensagem enviada para ${r.para}. Confira o seu WhatsApp.`);
+    if (r) avisoOk(`A Meta aceitou a mensagem para ${r.para}${r.waId ? ` (WhatsApp de destino: ${r.waId})` : ''}. Código: ${r.id || '—'}. Confira o seu WhatsApp, inclusive em Arquivadas.`);
   };
   raiz.append(h('h3', { class: 'rotulo' }, 'Testar no seu número'),
     h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega se você mandou mensagem para o número da empresa nas últimas 24 horas. ',

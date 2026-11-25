@@ -82,7 +82,8 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
     }
     if (!r.ok) return r;
     const id = r.dados && r.dados.messages && r.dados.messages[0] && r.dados.messages[0].id;
-    return { ok: true, id };
+    const waId = r.dados && r.dados.contacts && r.dados.contacts[0] && r.dados.contacts[0].wa_id;
+    return { ok: true, id, waId };
   }
 
   return {

@@ -17,7 +17,7 @@ test('envia texto no formato da Cloud API, com token no cabeçalho e número só
   const f = fetchFalso({ messages: [{ id: 'wamid.ABC' }] });
   const p = criarProvedorMeta({ numeroId: '123456', token: 'TK', fetch: f });
   const r = await p.enviar({ telefone: '+5564999998888', texto: 'Oi' });
-  assert.deepStrictEqual(r, { ok: true, id: 'wamid.ABC' });
+  assert.deepStrictEqual(r, { ok: true, id: 'wamid.ABC', waId: undefined });
   const c = f.chamadas[0];
   assert.strictEqual(c.url, `${GRAPH}/123456/messages`);
   assert.strictEqual(c.opcoes.method, 'POST');

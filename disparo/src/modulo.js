@@ -282,7 +282,7 @@ function registrarIpc() {
       ? await p.enviarModelo({ telefone: w.meuNumero, modelo: 'hello_world', idioma: 'en_US' })
       : await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
     if (!r.ok) throw new Error(r.erro);
-    return { para: formatarTelefone(w.meuNumero), id: r.id };
+    return { para: formatarTelefone(w.meuNumero), id: r.id, waId: r.waId ? '+' + r.waId : '' };
   });
 
   h('app:abrirPasta', () => { if (estado) shell.openPath(estado.pasta); return true; });
