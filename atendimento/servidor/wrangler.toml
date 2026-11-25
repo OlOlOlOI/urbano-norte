@@ -5,9 +5,9 @@ main = "src/index.js"
 compatibility_date = "2026-11-01"
 
 [vars]
-PHONE_NUMBER_ID = "COLOQUE_AQUI_O_ID_DO_NUMERO"
+PHONE_NUMBER_ID = "1373163822556154"  # número de TESTE da Meta (+1); trocar pelo brasileiro
 
 [[d1_databases]]
 binding = "DB"
 database_name = "atendimento-urbano-norte"
-database_id = "COLOQUE_AQUI_O_ID_DO_BANCO"
+database_id = "a0c9881c-9a60-4c9e-957b-d79a3ada8595"
