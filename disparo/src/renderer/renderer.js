@@ -401,6 +401,22 @@ async function passo3Enviar(raiz, modelo) {
     ...campo('Nome da campanha', nome, 'Quem já recebeu uma campanha com este nome não recebe de novo. Para mandar a mesma mensagem outra vez a todos, mude o nome.'),
     !r.usouAceite ? h('label', { class: 'marcar', for: 'confirma-autorizacao' }, confirma, 'Confirmo que todas as pessoas desta lista autorizaram receber mensagens da Urbano Norte.') : null);
 
+  // Prévia de verdade só no WhatsApp de quem está usando (a planilha nunca é usada aqui)
+  const w = await chamar(window.api.whatsapp.ler());
+  if (w && w.conta) {
+    const btnMim = h('button', { type: 'button', class: 'btn', onclick: async () => {
+      const texto = await previa(modelo.corpo, (S.ajustes.operador || '').split(' ')[0] || 'Maria');
+      btnMim.disabled = true; btnMim.textContent = 'Enviando…';
+      const res = await chamar(window.api.whatsapp.teste({ tipo: 'texto', texto }));
+      btnMim.disabled = false; btnMim.textContent = 'Enviar só para o meu WhatsApp';
+      if (res) avisoOk(`Prévia enviada só para ${res.para}. Ninguém da planilha recebeu.`);
+    } }, 'Enviar só para o meu WhatsApp');
+    raiz.append(h('div', { class: 'caixa ok' },
+      h('strong', {}, 'Quer ver no celular antes? '),
+      `Este botão manda esta mensagem só para ${w.meuNumero}, com o seu nome no lugar de {{nome}}. Ninguém da planilha recebe.`,
+      h('div', { class: 'acoes' }, btnMim)));
+  }
+
   raiz.append(h('div', { class: 'acoes' },
     h('button', { type: 'button', class: 'btn', onclick: async () => { S.camp.passo = 2; await ir('campanha'); } }, 'Voltar'),
     h('button', { type: 'button', class: 'btn principal vai', onclick: () => enviar(modelo, r, confirma) }, `Enviar para ${n} ${pl(n, 'pessoa', 'pessoas')}`)));
