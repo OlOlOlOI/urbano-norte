@@ -259,6 +259,10 @@ function registrarIpc() {
     if (!/^\d{5,25}$/.test(id)) throw new Error('O ID do número de telefone tem só números (copie do painel da Meta).');
     const tok = String(token || '').trim() || atual.token;
     if (!tok) throw new Error('Cole o token de acesso.');
+    const digitos = String(meuNumero || '').replace(/\D/g, '');
+    if (/^1?555\d{7}$/.test(digitos) || String(meuNumero || '').trim().startsWith('+1')) {
+      throw new Error('Esse é o número de teste da Meta (o remetente). Neste campo vai o SEU celular, que recebe o teste, ex.: (64) 99999-8888.');
+    }
     const tel = normalizarTelefone(meuNumero);
     if (!tel.ok) throw new Error(`Seu número parece errado (${tel.motivo}). Use DDD + número, ex.: (64) 99999-8888.`);
     // confere com a Meta antes de salvar, para já avisar se algo está errado
