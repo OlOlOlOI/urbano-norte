@@ -272,6 +272,27 @@ async function rotaApi(request, env, caminho) {
   return erro(404, 'Rota não encontrada.');
 }
 
+
+// ---------- página pública de privacidade (a Meta exige para publicar o app) ----------
+const PRIVACIDADE = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Política de Privacidade — Atendimento Urbano Norte</title>
+<style>body{font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2a2c;max-width:760px;margin:0 auto;padding:32px 20px;background:#f1f4f1}
+h1{color:#007a43;font-size:28px;margin:0 0 4px}h2{color:#007a43;font-size:19px;margin-top:28px}.data{color:#5d6360;margin:0 0 20px}</style></head><body>
+<h1>Política de Privacidade</h1>
+<p class="data">Atendimento Urbano Norte (WhatsApp) — Urbano Norte, transporte por aplicativo, Rio Verde-GO. Atualizada em 25/11/2026.</p>
+<p>Esta política explica como a Urbano Norte trata os dados de quem conversa com a empresa pelo WhatsApp, em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
+<h2>Quais dados usamos</h2>
+<p>Quando você manda mensagem para o WhatsApp da Urbano Norte, recebemos pela plataforma oficial do WhatsApp (Meta): seu número de telefone, o nome do seu perfil, o conteúdo das mensagens (texto, fotos, áudios, documentos e localização que você enviar) e a data e hora de cada mensagem.</p>
+<h2>Para que usamos</h2>
+<p>Somente para responder ao seu atendimento (dúvidas, objetos esquecidos, reclamações, informações sobre corridas) e, quando você autorizar, para enviar comunicados da Urbano Norte. Não vendemos nem compartilhamos seus dados com terceiros para fins de publicidade.</p>
+<h2>Onde ficam e por quanto tempo</h2>
+<p>As conversas ficam guardadas em servidor seguro, acessado apenas pela equipe de atendimento da Urbano Norte com chave de acesso. Mantemos o histórico enquanto for necessário para o atendimento e para obrigações legais. Arquivos de mídia ficam com a Meta e expiram conforme as regras do WhatsApp.</p>
+<h2 id="exclusao">Seus direitos e como apagar seus dados</h2>
+<p>Você pode pedir a qualquer momento: acesso, correção ou exclusão dos seus dados, ou deixar de receber comunicados. Basta enviar uma mensagem para o próprio WhatsApp da Urbano Norte dizendo, por exemplo, "quero apagar meus dados" ou "não quero receber mensagens". Atendemos em até 15 dias.</p>
+<h2>Contato</h2>
+<p>Dúvidas sobre esta política: fale com a Urbano Norte pelo WhatsApp oficial ou pelos canais oficiais da empresa.</p>
+</body></html>`;
+
 export default {
   async fetch(request, env, ctx) {
     const caminho = new URL(request.url).pathname.replace(/\/+$/, '') || '/';
@@ -279,6 +300,7 @@ export default {
       if (caminho === '/webhook') return await rotaWebhook(request, env, ctx);
       if (caminho.startsWith('/api/')) return await rotaApi(request, env, caminho);
       if (caminho === '/') return new Response('Atendimento Urbano Norte: no ar.', { status: 200 });
+      if (caminho === '/privacidade') return new Response(PRIVACIDADE, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       return new Response('Não encontrado', { status: 404 });
     } catch (e) {
       console.error(e);

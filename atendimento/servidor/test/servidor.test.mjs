@@ -183,3 +183,10 @@ test('foto do cliente: o app baixa pelo servidor, que busca na Meta com o token'
   const c = (await (await api(env, '/api/conversas')).json()).conversas[0];
   assert.strictEqual(c.previa, '📷 Foto');
 });
+
+test('página pública de privacidade (exigida pela Meta)', async () => {
+  const r = await chamar(ambiente(), '/privacidade');
+  assert.strictEqual(r.status, 200);
+  assert.match(r.headers.get('Content-Type'), /text\/html/);
+  assert.match(await r.text(), /apagar seus dados/);
+});
