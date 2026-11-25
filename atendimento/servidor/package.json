@@ -1,0 +1,12 @@
+{
+  "name": "atendimento-urbano-norte-servidor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor do Atendimento (Cloudflare Worker + D1): recebe o webhook do WhatsApp e serve o app do escritório",
+  "scripts": {
+    "test": "node --test test/servidor.test.mjs",
+    "dev": "node dev.mjs",
+    "deploy": "wrangler deploy"
+  }
+}

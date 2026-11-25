@@ -12,17 +12,20 @@ if (process.env.URBANO_PASTA_DADOS) app.setPath('userData', process.env.URBANO_P
 
 const sorteio = require('./modulos/sorteio/modulo');
 const disparo = require('./modulos/disparo/modulo');
+const atendimento = require('./modulos/atendimento/modulo');
 
 const BARRA = 48; // altura da barra de abas
 const ABAS = {
   sorteio: { preload: 'modulos/sorteio/preload.js', pagina: 'modulos/sorteio/renderer/index.html', fundo: '#eceff2' },
   disparo: { preload: 'modulos/disparo/preload.js', pagina: 'modulos/disparo/renderer/index.html', fundo: '#ffffff' },
+  atendimento: { preload: 'modulos/atendimento/preload.js', pagina: 'modulos/atendimento/renderer/index.html', fundo: '#f1f4f1' },
 };
 
 let janela = null;
 const telas = {};
 let abaAtual = 'sorteio';
-let vertical = false; // modo vertical do sorteio (Reels/Stories): a tela ocupa a janela toda, sem barra
+let vertical = false;
+let naoLidas = 0; // mensagens do Atendimento ainda não lidas (contador na aba) // modo vertical do sorteio (Reels/Stories): a tela ocupa a janela toda, sem barra
 
 const pastaModulo = (nome) => path.join(app.getPath('userData'), nome);
 const arqPrefs = () => path.join(app.getPath('userData'), 'app.json');
@@ -48,11 +51,11 @@ function mostrarAba(nome) {
   gravarPrefs({ aba: nome });
 }
 
-// Ctrl+1 / Ctrl+2 (Cmd no Mac) trocam de aba de qualquer tela.
+// Ctrl+1 / Ctrl+2 / Ctrl+3 (Cmd no Mac) trocam de aba de qualquer tela.
 function atalhos(wc) {
   wc.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt || input.shift) return;
-    const alvo = { 1: 'sorteio', 2: 'disparo' }[input.key];
+    const alvo = { 1: 'sorteio', 2: 'disparo', 3: 'atendimento' }[input.key];
     if (alvo) { e.preventDefault(); mostrarAba(alvo); }
   });
 }
@@ -92,7 +95,7 @@ function criarJanela() {
   if (ABAS[salva]) abaAtual = salva;
   posicionar();
   janela.on('resize', posicionar);
-  janela.webContents.on('did-finish-load', () => janela.webContents.send('shell:aba', abaAtual));
+  janela.webContents.on('did-finish-load', () => { janela.webContents.send('shell:aba', abaAtual); janela.webContents.send('shell:contador', { atendimento: naoLidas }); });
   janela.on('closed', () => { janela = null; for (const k of Object.keys(telas)) delete telas[k]; });
 }
 
@@ -119,6 +122,17 @@ app.whenReady().then(() => {
     pastaDados: () => pastaModulo('disparo'),
     janela: janelaViva,
     conteudo: () => (telas.disparo && !telas.disparo.webContents.isDestroyed() ? telas.disparo.webContents : null),
+  });
+  atendimento.registrar({
+    pastaDados: () => pastaModulo('atendimento'),
+    janela: janelaViva,
+    conteudo: () => (telas.atendimento && !telas.atendimento.webContents.isDestroyed() ? telas.atendimento.webContents : null),
+    visivel: () => Boolean(janelaViva() && janela.isFocused() && abaAtual === 'atendimento'),
+    aoNaoLidas: (n) => {
+      naoLidas = n;
+      if (janelaViva()) janela.webContents.send('shell:contador', { atendimento: n });
+      try { app.setBadgeCount(n); } catch { /* sistema sem contador no ícone */ }
+    },
   });
   criarJanela();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });

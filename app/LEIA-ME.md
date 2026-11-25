@@ -4,8 +4,9 @@ Um app só para Windows e Mac, com abas:
 
 - **Sorteio** — o mesmo sorteio de corridas do app "Sorteio Urbano Norte".
 - **Disparo (beta)** — o mesmo disparo de campanhas do app "Disparo Urbano Norte" (ainda em modo simulação).
+- **Atendimento (beta)** — conversas do WhatsApp da empresa pelo computador (ver `../atendimento/LEIA-ME.md`).
 
-Atalhos: **Ctrl+1** / **Ctrl+2** (Cmd no Mac) trocam de aba. No modo vertical do sorteio (Reels/Stories) a barra de abas some.
+Atalhos: **Ctrl+1** / **Ctrl+2** / **Ctrl+3** (Cmd no Mac) trocam de aba. No modo vertical do sorteio (Reels/Stories) a barra de abas some.
 
 ## Como funciona por dentro
 

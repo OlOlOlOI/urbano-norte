@@ -40,3 +40,9 @@ nav button:focus-visible { outline: 2px solid var(--lima); outline-offset: -4px;
 }
 
 .versao { margin-left: auto; display: flex; align-items: center; color: #77767a; font-size: 12px; }
+
+.contador {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: #e5484d; color: #fff; font-size: 11px; display: grid; place-items: center;
+}
+.oculto { display: none; }

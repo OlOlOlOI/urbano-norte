@@ -1,0 +1,13 @@
+# Configuração do servidor do Atendimento na Cloudflare.
+# Passo a passo em LEIA-ME.md. Os segredos NÃO ficam aqui (use `npx wrangler secret put`).
+name = "atendimento-urbano-norte"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+PHONE_NUMBER_ID = "COLOQUE_AQUI_O_ID_DO_NUMERO"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "atendimento-urbano-norte"
+database_id = "COLOQUE_AQUI_O_ID_DO_BANCO"

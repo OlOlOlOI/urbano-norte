@@ -16,6 +16,9 @@ const copias = [
   ['disparo/src/preload.js', 'disparo/preload.js'],
   ['disparo/src/core', 'disparo/core'],
   ['disparo/src/renderer', 'disparo/renderer'],
+  ['atendimento/app/modulo.js', 'atendimento/modulo.js'],
+  ['atendimento/app/preload.js', 'atendimento/preload.js'],
+  ['atendimento/app/renderer', 'atendimento/renderer'],
 ];
 
 fs.rmSync(destino, { recursive: true, force: true });
@@ -24,5 +27,5 @@ for (const [de, para] of copias) {
   if (!fs.existsSync(origem)) throw new Error(`Não achei ${de}`);
   fs.cpSync(origem, path.join(destino, para), { recursive: true });
 }
-fs.writeFileSync(path.join(destino, 'LEIA-ME.txt'), 'Pasta gerada por scripts/montar-modulos.js. Não edite aqui: edite sorteio/desktop e disparo/src.\n');
+fs.writeFileSync(path.join(destino, 'LEIA-ME.txt'), 'Pasta gerada por scripts/montar-modulos.js. Não edite aqui: edite sorteio/desktop, disparo/src e atendimento/app.\n');
 console.log('[montar-modulos] ok:', destino);

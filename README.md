@@ -7,7 +7,8 @@ Repositório único com todos os sistemas desenvolvidos para a Urbano Norte (tra
 | [`sorteio/web/`](sorteio/web) | Sorteio de corridas — versão celular (PWA) | Navegador / GitHub Pages |
 | [`sorteio/desktop/`](sorteio/desktop) | Sorteio de corridas — versão computador | Electron (Windows .exe, Mac .dmg) |
 | [`disparo/`](disparo) | Disparo de campanhas por WhatsApp (modo simulação) | Electron (Windows .exe, Mac .dmg) |
-| [`app/`](app) | **App unificado**: Sorteio + Disparo (beta) em abas | Electron (Windows .exe, Mac .dmg) |
+| [`atendimento/`](atendimento) | Atendimento pelo WhatsApp: servidor na nuvem + aba no app | Cloudflare Workers + Electron |
+| [`app/`](app) | **App unificado**: Sorteio + Disparo (beta) + Atendimento (beta) em abas | Electron (Windows .exe, Mac .dmg) |
 
 ## Automações (aba Actions)
 

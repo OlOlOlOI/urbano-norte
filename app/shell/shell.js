@@ -17,4 +17,10 @@ document.querySelector('nav').addEventListener('keydown', (e) => {
 });
 
 window.shell.aoMudarAba(marcar);
+window.shell.aoContador(({ atendimento }) => {
+  const el = document.getElementById('contador-atendimento');
+  el.textContent = atendimento > 99 ? '99+' : String(atendimento || '');
+  el.classList.toggle('oculto', !atendimento);
+  el.setAttribute('aria-label', atendimento ? `${atendimento} mensagens não lidas` : '');
+});
 window.shell.info().then(({ aba, versao }) => { marcar(aba); document.getElementById('versao').textContent = 'v' + versao; });
