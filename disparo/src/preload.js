@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   envio: { previa: chamar('envio:previa'), iniciar: chamar('envio:iniciar'), cancelar: chamar('envio:cancelar') },
   descadastros: { listar: chamar('descadastros:listar'), adicionar: chamar('descadastros:adicionar'), remover: chamar('descadastros:remover') },
   historico: { ler: chamar('historico:ler') },
+  whatsapp: { ler: chamar('whatsapp:ler'), salvar: chamar('whatsapp:salvar'), apagar: chamar('whatsapp:apagar'), teste: chamar('whatsapp:teste') },
   abrirPasta: chamar('app:abrirPasta'),
   aoMudarPlanilha: ouvir('planilha-mudou'),
   aoProgredir: ouvir('envio:progresso'),

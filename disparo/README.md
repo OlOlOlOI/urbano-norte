@@ -21,5 +21,13 @@ Sem certificado de desenvolvedor: o Windows mostra "SmartScreen" (Mais informaç
 ## Testes
 Dentro da pasta `disparo/`: `npm install` e `npm test` (núcleo). `npm start` abre o app.
 
-## Falta para o envio real
-Ligar a API oficial do WhatsApp (Meta). O ponto de ligação é `src/core/provider-sim.js`: um provedor real precisa só do método `enviar({telefone, texto, campanha})`.
+## WhatsApp de verdade (API oficial da Meta)
+Em **Configurações → WhatsApp (API oficial da Meta)** cada computador cola o *ID do número de telefone* e o *token de acesso* do painel da Meta, mais o número de quem vai testar.
+O token fica cifrado só naquele computador (nunca vai para a pasta compartilhada). O app confere com a Meta antes de salvar.
+
+Por enquanto só existe o **teste no próprio número** (texto livre ou o modelo `hello_world`). As campanhas continuam em modo simulação.
+
+O provedor real está em `src/core/provider-meta.js` (Graph API v27.0). Falta para ligar as campanhas:
+- modelos (templates) aprovados pela Meta — fora da janela de 24 h o WhatsApp só aceita modelos;
+- número próprio da empresa verificado (o número de teste da Meta só envia para até 5 números cadastrados);
+- token permanente (usuário do sistema), pois o do painel vence em 24 h.

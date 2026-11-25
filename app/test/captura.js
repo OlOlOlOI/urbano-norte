@@ -49,6 +49,11 @@ app.whenReady().then(async () => {
     await espera(600);
     conferir('trocou para o disparo', principal.aba() === 'disparo');
     await capturar('2-disparo');
+    await t.disparo.webContents.executeJavaScript("ir('config').then(() => { const h = [...document.querySelectorAll('h2')].find((e) => /WhatsApp/.test(e.textContent)); h.scrollIntoView(); return !!h; })");
+    await espera(500);
+    const temWhats = await t.disparo.webContents.executeJavaScript("typeof window.api.whatsapp.salvar === 'function' && !!document.querySelector('input[type=password]')");
+    conferir('disparo: seção WhatsApp nas Configurações', temWhats);
+    await capturar('2b-disparo-whatsapp');
     principal.mostrarAba('sorteio');
     await espera(400);
 

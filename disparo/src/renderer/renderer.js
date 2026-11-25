@@ -571,6 +571,9 @@ async function telaConfig(raiz) {
       } }, 'Salvar limites')));
   }
 
+  // WhatsApp (API oficial da Meta) — fica só neste computador
+  await secaoWhatsApp(raiz);
+
   // Tamanho do texto
   const atual = lerTexto();
   const opcoes = [['normal', 'Normal'], ['grande', 'Grande'], ['enorme', 'Muito grande']];
@@ -583,6 +586,54 @@ async function telaConfig(raiz) {
         return h('label', { class: 'marcar', for: id }, r, rot);
       })),
     h('h2', {}, 'Sobre'), h('p', { class: 'apoio' }, `Versão ${a.versao}.`));
+}
+
+/* WhatsApp: credenciais da API oficial e teste no próprio número.
+   Os envios de campanha continuam em modo de teste; aqui só sai mensagem para o número da própria pessoa. */
+async function secaoWhatsApp(raiz) {
+  const w = await chamar(window.api.whatsapp.ler());
+  if (!w) return;
+  raiz.append(h('h2', {}, 'WhatsApp (API oficial da Meta)'),
+    h('p', { class: 'apoio' }, 'Copie os dados do painel da Meta (developers.facebook.com › seu app › WhatsApp › Configuração da API). ',
+      'Ficam guardados só neste computador, cifrados. As campanhas continuam em modo de teste: daqui só sai mensagem para o seu número.'));
+  if (!w.protecao) { raiz.append(h('div', { class: 'caixa erro' }, 'Este computador não oferece cofre seguro, então o token não pode ser guardado.')); return; }
+  if (w.conta) raiz.append(h('div', { class: 'caixa ok', role: 'status' }, h('strong', {}, 'Conectado. '), `Número da empresa: ${w.conta.numero}${w.conta.nome ? ` (${w.conta.nome})` : ''}. Seu número para testes: ${w.meuNumero}.`));
+
+  const numeroId = h('input', { type: 'text', value: w.numeroId, autocomplete: 'off', inputmode: 'numeric', spellcheck: 'false' });
+  const token = h('input', { type: 'password', value: '', autocomplete: 'off', spellcheck: 'false', placeholder: w.temToken ? 'Token salvo. Cole outro só para trocar.' : '' });
+  const meu = h('input', { type: 'tel', value: w.meuNumero, autocomplete: 'off', placeholder: '(64) 99999-8888' });
+  raiz.append(
+    ...campo('ID do número de telefone', numeroId, 'Em inglês aparece como "Phone number ID". Só números.'),
+    ...campo('Token de acesso', token, 'O token temporário do painel vale 24 horas. Depois é preciso gerar outro.'),
+    ...campo('Seu número de WhatsApp (para testes)', meu, 'No número de teste da Meta, ele precisa estar na lista "Para" do painel.'),
+    h('div', { class: 'acoes' },
+      h('button', { type: 'button', class: 'btn principal', onclick: async (ev) => {
+        ev.target.disabled = true; ev.target.textContent = 'Conferindo com a Meta…';
+        const c = await chamar(window.api.whatsapp.salvar({ numeroId: numeroId.value, token: token.value, meuNumero: meu.value }));
+        if (c) { await ir('config'); avisoOk(`WhatsApp conectado: ${c.numero}.`); } else { ev.target.disabled = false; ev.target.textContent = 'Salvar e conferir'; }
+      } }, 'Salvar e conferir'),
+      w.temToken ? h('button', { type: 'button', class: 'btn discreto', onclick: async () => {
+        if (await confirmar({ titulo: 'Apagar os dados do WhatsApp?', texto: 'O ID e o token saem deste computador. Os outros computadores não são afetados.', sim: 'Apagar', perigo: true })
+          && await chamar(window.api.whatsapp.apagar())) { await ir('config'); avisoOk('Dados do WhatsApp apagados deste computador.'); }
+      } }, 'Apagar deste computador') : null));
+
+  if (!w.conta) return;
+  const texto = h('textarea', { rows: '3' });
+  texto.value = 'Olá! Este é um teste do Disparo Urbano Norte.';
+  const enviarTeste = async (tipo, botao) => {
+    const rotulo = botao.textContent;
+    botao.disabled = true; botao.textContent = 'Enviando…';
+    const r = await chamar(window.api.whatsapp.teste({ tipo, texto: texto.value }));
+    botao.disabled = false; botao.textContent = rotulo;
+    if (r) avisoOk(`Mensagem enviada para ${r.para}. Confira o seu WhatsApp.`);
+  };
+  raiz.append(h('h3', { class: 'rotulo' }, 'Testar no seu número'),
+    h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega se você mandou mensagem para o número da empresa nas últimas 24 horas. ',
+      'Se nunca mandou, comece pelo modelo "hello_world" (mensagem pronta da Meta, em inglês) ou mande um "oi" para o número da empresa.'),
+    ...campo('Texto do teste', texto),
+    h('div', { class: 'acoes' },
+      h('button', { type: 'button', class: 'btn', onclick: (ev) => enviarTeste('modelo', ev.target) }, 'Enviar modelo hello_world'),
+      h('button', { type: 'button', class: 'btn principal', onclick: (ev) => enviarTeste('texto', ev.target) }, 'Enviar este texto')));
 }
 
 /* =====================================================================

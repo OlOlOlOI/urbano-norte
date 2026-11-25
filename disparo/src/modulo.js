@@ -2,7 +2,7 @@
 // Disparo Urbano Norte — parte do processo principal (planilha, campanhas, descadastros...).
 // Usado pelo app próprio do disparo (main.js) e pelo app unificado da Urbano Norte (pasta app/ do monorepo).
 
-const { app, ipcMain, dialog, shell } = require('electron');
+const { app, ipcMain, dialog, shell, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -15,12 +15,32 @@ const { Estado, slug } = require('./core/state');
 const { executarCampanha } = require('./core/sender');
 const { adivinharColunas, colunasFaltando } = require('./core/columns');
 const { criarProvedorSimulacao } = require('./core/provider-sim');
+const { criarProvedorMeta } = require('./core/provider-meta');
 
 // ---------- configuração local (por computador) ----------
 let pastaDados = () => app.getPath('userData');
 const arqLocal = () => path.join(pastaDados(), 'config-local.json');
 function lerLocal() { try { return JSON.parse(fs.readFileSync(arqLocal(), 'utf8')); } catch { return {}; } }
 function gravarLocal(p) { const n = { ...lerLocal(), ...p }; fs.mkdirSync(path.dirname(arqLocal()), { recursive: true }); fs.writeFileSync(arqLocal(), JSON.stringify(n, null, 2)); return n; }
+
+// ---------- WhatsApp (API oficial da Meta): credenciais deste computador ----------
+// O token NUNCA vai para a pasta compartilhada: fica cifrado pelo sistema (Keychain no Mac, DPAPI no Windows).
+const arqWhats = () => path.join(pastaDados(), 'whatsapp.dat');
+const protecao = () => { try { return safeStorage.isEncryptionAvailable(); } catch { return false; } };
+function lerWhats() {
+  try { return JSON.parse(safeStorage.decryptString(fs.readFileSync(arqWhats()))); } catch { return {}; }
+}
+function gravarWhats(dados) {
+  if (!protecao()) throw new Error('Este computador não oferece cofre seguro para guardar o token.');
+  fs.mkdirSync(path.dirname(arqWhats()), { recursive: true });
+  fs.writeFileSync(arqWhats() + '.tmp', safeStorage.encryptString(JSON.stringify(dados)));
+  fs.renameSync(arqWhats() + '.tmp', arqWhats());
+}
+function provedorMeta() {
+  const w = lerWhats();
+  if (!w.numeroId || !w.token) throw new Error('Configure o WhatsApp em Configurações primeiro.');
+  return criarProvedorMeta({ numeroId: w.numeroId, token: w.token });
+}
 
 let janela = () => null;   // janela dona dos diálogos
 let conteudo = () => null; // tela do disparo, que recebe os avisos
@@ -227,6 +247,39 @@ function registrarIpc() {
   h('descadastros:remover', (telefone) => { estado.removerDescadastro(telefone); return true; });
 
   h('historico:ler', () => ({ resumo: estado.resumoCampanhas(), recentes: estado.historico(100).map((e) => ({ ...e, exibir: formatarTelefone(e.telefone) })) }));
+
+  // ---------- WhatsApp: credenciais e teste no próprio número ----------
+  h('whatsapp:ler', () => {
+    const w = lerWhats();
+    return { numeroId: w.numeroId || '', temToken: Boolean(w.token), meuNumero: w.meuNumero ? formatarTelefone(w.meuNumero) : '', conta: w.conta || null, protecao: protecao() };
+  });
+  h('whatsapp:salvar', async ({ numeroId, token, meuNumero }) => {
+    const atual = lerWhats();
+    const id = String(numeroId || '').trim();
+    if (!/^\d{5,25}$/.test(id)) throw new Error('O ID do número de telefone tem só números (copie do painel da Meta).');
+    const tok = String(token || '').trim() || atual.token;
+    if (!tok) throw new Error('Cole o token de acesso.');
+    const tel = normalizarTelefone(meuNumero);
+    if (!tel.ok) throw new Error(`Seu número parece errado (${tel.motivo}). Use DDD + número, ex.: (64) 99999-8888.`);
+    // confere com a Meta antes de salvar, para já avisar se algo está errado
+    const c = await criarProvedorMeta({ numeroId: id, token: tok }).conferir();
+    if (!c.ok) throw new Error(c.erro);
+    const conta = { numero: c.numero, nome: c.nome, conferidoEm: new Date().toISOString() };
+    gravarWhats({ numeroId: id, token: tok, meuNumero: tel.e164, conta });
+    return conta;
+  });
+  h('whatsapp:apagar', () => { fs.rmSync(arqWhats(), { force: true }); return true; });
+  h('whatsapp:teste', async ({ tipo, texto }) => {
+    const w = lerWhats();
+    if (!w.meuNumero) throw new Error('Salve o seu número primeiro.');
+    const p = provedorMeta();
+    // só para o número da própria pessoa: este botão nunca envia para a planilha
+    const r = tipo === 'modelo'
+      ? await p.enviarModelo({ telefone: w.meuNumero, modelo: 'hello_world', idioma: 'en_US' })
+      : await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
+    if (!r.ok) throw new Error(r.erro);
+    return { para: formatarTelefone(w.meuNumero), id: r.id };
+  });
 
   h('app:abrirPasta', () => { if (estado) shell.openPath(estado.pasta); return true; });
 }
