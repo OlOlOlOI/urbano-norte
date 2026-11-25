@@ -644,6 +644,7 @@ async function secaoWhatsApp(raiz) {
     if (r) avisoOk(`A Meta aceitou a mensagem para ${r.para}${r.waId ? ` (WhatsApp de destino: ${r.waId})` : ''}. Código: ${r.id || '—'}. Confira o seu WhatsApp, inclusive em Arquivadas.`);
   };
   raiz.append(h('h3', { class: 'rotulo' }, 'Testar no seu número'),
+    h('div', { class: 'caixa' }, h('strong', {}, 'Atenção: '), 'o número de teste da Meta (+1, dos EUA) não entrega mensagens para celulares do Brasil — a Meta bloqueia envio de outro país para o Brasil (erro 130497). A Meta aceita o envio, mas ele falha depois. Para testar no seu celular é preciso um número brasileiro da empresa (Etapa 2 no painel da Meta).'),
     h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega se você mandou mensagem para o número da empresa nas últimas 24 horas. ',
       'Se nunca mandou, comece pelo modelo "hello_world" (mensagem pronta da Meta, em inglês) ou mande um "oi" para o número da empresa.'),
     ...campo('Texto do teste', texto),

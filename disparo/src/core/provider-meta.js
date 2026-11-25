@@ -22,6 +22,7 @@ const ERROS = {
   132001: 'O modelo (template) não existe ou não está aprovado neste idioma.',
   100: 'Algum dado está errado (confira o ID do número de telefone).',
   10: 'O token não tem permissão para enviar por este número.',
+  130497: 'A Meta bloqueia envio de número estrangeiro para celulares do Brasil. O número de teste (+1, dos EUA) não entrega no Brasil: é preciso usar um número brasileiro da empresa (Etapa 2 no painel da Meta).',
   80007: 'Limite de envios da Meta atingido. Espere um pouco e tente de novo.',
   130429: 'Limite de envios da Meta atingido. Espere um pouco e tente de novo.',
 };
