@@ -1,0 +1,42 @@
+@font-face {
+  font-family: "Outfit";
+  src: url("fonts/outfit-latin-600-normal.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --carvao: #2b2a2c;
+  --grafite: #414042;
+  --verde: #00a651;
+  --lima: #68c52f;
+  --texto: #ffffff;
+  --texto-fraco: #b9b8bb;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--carvao); overflow: hidden; }
+body { font: 600 14px/1 "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--texto); user-select: none; }
+
+.barra { height: 48px; display: flex; align-items: stretch; gap: 28px; padding: 0 18px; border-bottom: 1px solid #1d1c1e; }
+
+.marca { display: flex; align-items: center; gap: 8px; letter-spacing: .02em; color: var(--texto); }
+.ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 3px rgba(0, 166, 81, .25); }
+
+nav { display: flex; align-items: stretch; gap: 4px; }
+nav button {
+  font: inherit; color: var(--texto-fraco); background: none; border: 0; cursor: pointer;
+  padding: 0 16px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 3px solid transparent; border-top: 3px solid transparent;
+  transition: color .15s, border-color .15s, background-color .15s;
+}
+nav button:hover { color: var(--texto); background: rgba(255, 255, 255, .04); }
+nav button[aria-selected="true"] { color: var(--texto); border-bottom-color: var(--verde); }
+nav button:focus-visible { outline: 2px solid var(--lima); outline-offset: -4px; border-radius: 4px; }
+
+.beta {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--carvao); background: var(--lima); border-radius: 999px; padding: 3px 7px 2px;
+}
+
+.versao { margin-left: auto; display: flex; align-items: center; color: #77767a; font-size: 12px; }

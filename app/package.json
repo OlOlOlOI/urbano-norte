@@ -1,0 +1,81 @@
+{
+  "name": "urbano-norte",
+  "productName": "Urbano Norte",
+  "version": "1.0.0",
+  "description": "Sistemas da Urbano Norte em um app só: sorteio e disparo de mensagens",
+  "main": "main.js",
+  "author": "Urbano Norte",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "montar": "node scripts/montar-modulos.js",
+    "prestart": "npm run montar",
+    "start": "electron .",
+    "predist": "npm run montar",
+    "dist": "electron-builder --publish never",
+    "test": "node --test test/*.test.js",
+    "test:visual": "npm run montar && electron test/captura.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "br.com.urbanonorte.app",
+    "productName": "Urbano Norte",
+    "files": [
+      "main.js",
+      "migracao.js",
+      "shell/**/*",
+      "modulos/**/*",
+      "build/icon-win.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon-win.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Urbano-Norte-Instalador-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Urbano-Norte-Portatil-${version}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "Urbano-Norte-${version}-${arch}.${ext}",
+      "icon": "build/icon.png"
+    },
+    "afterSign": "scripts/adhoc-sign.js"
+  }
+}

@@ -23,6 +23,7 @@
     "productName": "Sorteio Urbano Norte",
     "files": [
       "main.js",
+      "modulo.js",
       "preload.js",
       "leitor.js",
       "renderer/**/*",
