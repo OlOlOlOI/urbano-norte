@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; font-src 'self'; media-src blob:">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sorteio Urbano Norte</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="config" id="painel">
+      <div class="config-topo">
+        <div class="marca">
+          <img id="logoMarca" class="logo-lateral" src="assets/emblema.png" alt="Urbano Norte">
+          <h1>Sorteio<span id="assinatura">Orgulho de estar aqui.</span></h1>
+        </div>
+        <button id="btnOcultar" class="btn-icone" title="Ocultar configurações" aria-label="Ocultar configurações">&#10094;</button>
+      </div>
+
+      <section>
+        <h2>Planilha</h2>
+        <button id="btnAbrir" class="btn btn-escuro">Escolher planilha</button>
+        <p id="arquivoNome" class="dica">Nenhum arquivo aberto.</p>
+        <p id="erro" class="erro" hidden></p>
+      </section>
+
+      <section id="blocoColunas" hidden>
+        <h2>Colunas</h2>
+        <label>Aba
+          <select id="selAba"></select>
+        </label>
+        <label>Linha dos títulos
+          <input id="inpTitulo" type="number" min="1" value="1">
+        </label>
+        <label>O.S
+          <select id="selOS"></select>
+        </label>
+        <label>Dia da corrida
+          <select id="selDia"></select>
+        </label>
+        <label>Passageiro(a)
+          <select id="selPass"></select>
+        </label>
+        <label>Telefone do(a) passageiro(a) <small>(só aparece na aba Contato e no Excel)</small>
+          <select id="selTel"></select>
+        </label>
+        <label>E-mail do(a) passageiro(a) <small>(só aparece na aba Contato)</small>
+          <select id="selEmail"></select>
+        </label>
+        <label>Motorista
+          <select id="selMot"></select>
+        </label>
+      </section>
+
+      <section id="blocoRegras" hidden>
+        <h2>Regras</h2>
+        <label class="check"><input id="optOS" type="checkbox" checked> Não repetir a mesma O.S</label>
+        <label class="check"><input id="optPass" type="checkbox"> Não repetir o(a) mesmo(a) passageiro(a)</label>
+        <label class="check"><input id="optMot" type="checkbox"> Não repetir o mesmo motorista</label>
+        <label class="filtro">Sortear só entre as corridas com
+          <select id="selFiltroCol"></select>
+        </label>
+        <label id="lblFiltroVal" hidden>Valor
+          <select id="selFiltroVal"></select>
+        </label>
+        <p id="infoElegiveis" class="dica"></p>
+      </section>
+
+      <section id="blocoResultados">
+        <h2>Histórico</h2>
+        <p id="resumoSorteios" class="dica">Nenhum sorteio feito ainda.</p>
+        <button id="btnHistorico" class="btn btn-escuro">Ver histórico</button>
+        <button id="btnExportar" class="btn btn-escuro" disabled>Salvar em Excel (com contato)</button>
+        <button id="btnLimpar" class="btn btn-escuro" disabled>Limpar histórico</button>
+        <p id="avisoContato" class="dica" hidden>Neste computador não há proteção do sistema para guardar telefones. O contato só sai no Excel se a planilha estiver aberta.</p>
+      </section>
+
+      <section id="blocoVertical">
+        <h2>Reels e Stories</h2>
+        <button id="btnVertical" class="btn btn-escuro">Modo vertical (9:16)</button>
+        <button id="btnGravar" class="btn btn-escuro" disabled>Gravar vídeo do sorteio (10 s)</button>
+        <label>Qualidade do vídeo
+          <select id="videoQualidade">
+            <option value="max60">Máxima: 1080×1920, 60 fps</option>
+            <option value="alta30">Alta: 1080×1920, 30 fps</option>
+            <option value="leve">Leve: 720×1280, 30 fps (computador fraco)</option>
+          </select>
+        </label>
+        <button id="btnImagem" class="btn btn-escuro" disabled>Salvar imagem do resultado</button>
+        <p id="resumoImagem" class="dica"></p>
+        <button id="btnSalvarVideoDeNovo" class="btn btn-escuro btn-pequeno" hidden>Salvar o vídeo pronto</button>
+        <button id="btnMostrarSalvo" class="btn btn-escuro btn-pequeno" hidden>Mostrar o arquivo salvo</button>
+        <p id="pastaAtual" class="dica"></p>
+        <div class="linha-botoes">
+          <button id="btnPasta" class="btn btn-escuro btn-pequeno">Escolher pasta…</button>
+          <button id="btnAbrirPasta" class="btn btn-escuro btn-pequeno">Abrir pasta</button>
+        </div>
+        <label class="check"><input id="pastaDireto" type="checkbox" disabled> Salvar direto nessa pasta, sem perguntar</label>
+        <p class="dica">Grave a tela neste modo para postar o sorteio. A imagem sai em 1080×1920 e nunca leva telefone nem e-mail. Esc volta ao modo normal.</p>
+      </section>
+
+      <section id="blocoTema">
+        <h2>Personalização</h2>
+        <label>Título do bilhete
+          <input id="temaRotulo" type="text" maxlength="40" placeholder="Pessoa sorteada">
+        </label>
+        <label>Nome do sorteio <small>(aparece acima do bilhete)</small>
+          <input id="temaNome" type="text" maxlength="60" placeholder="Ex.: Sorteio de aniversário">
+        </label>
+        <div class="linha-botoes">
+          <button id="btnLogo" class="btn btn-escuro btn-pequeno">Trocar logo…</button>
+          <button id="btnLogoPadrao" class="btn btn-escuro btn-pequeno">Logo padrão</button>
+        </div>
+        <div class="cores">
+          <label>Principal <input id="corBotao" type="color" value="#00a651"></label>
+          <label>Destaques <input id="corDestaque" type="color" value="#68c52f"></label>
+          <label>Fundo escuro <input id="corEscuro" type="color" value="#2b2a2c"></label>
+        </div>
+        <button id="btnCoresMarca" class="btn btn-escuro btn-pequeno">Restaurar cores da marca</button>
+        <label>Animação do fundo
+          <select id="temaFundo">
+            <option value="hexagonos">Hexágonos flutuantes</option>
+            <option value="confete">Confete</option>
+            <option value="nenhum">Sem animação</option>
+          </select>
+        </label>
+        <label class="check"><input id="temaCelebrar" type="checkbox" checked> Chuva de confete ao sortear</label>
+        <label class="check"><input id="temaAbertura" type="checkbox" checked> Mostrar a animação da logo ao abrir</label>
+      </section>
+    </aside>
+
+    <div class="palco-casca">
+      <canvas id="fundoAnimado" class="fundo-animado" aria-hidden="true"></canvas>
+      <main class="palco">
+        <button id="btnMostrar" class="btn btn-claro btn-mostrar">&#9776; Configurações</button>
+        <button id="btnContato" class="btn btn-claro btn-contato" disabled title="Faça um sorteio ou escolha um do histórico">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+          Contato
+        </button>
+
+        <div class="cena">
+          <div class="cabecalho-vertical" aria-hidden="true"><img id="logoVertical" src="assets/emblema.png" alt=""></div>
+          <p id="nomeSorteio" class="nome-sorteio" hidden></p>
+          <article id="ticket" class="ticket vazio" aria-live="polite">
+            <div class="ticket-topo">
+              <img id="logoBilhete" class="logo-bilhete" src="assets/emblema.png" alt="">
+              <span id="rotuloBilhete">Pessoa sorteada</span>
+              <strong id="tPass">—</strong>
+              <div class="pista" aria-hidden="true">
+                <p class="pista-texto">Sorteando<span>.</span><span>.</span><span>.</span></p>
+                <div class="cidade"></div>
+                <div class="rua"><div class="faixa"></div></div>
+                <svg class="carro" viewBox="0 0 160 66">
+                  <path class="corpo" d="M8 46 V37 Q8 32 14 30 L36 26 L52 11 Q55 8 60 8 H100 Q106 8 110 12 L126 27 L146 31 Q152 32 152 39 V46 Q152 50 148 50 H12 Q8 50 8 46 Z"/>
+                  <path d="M54 26 L63 14 H97 L111 26 Z" fill="#1d2630"/>
+                  <path d="M81 14 V26" stroke="#2b2a2c" stroke-width="3"/>
+                  <path d="M80 32 L85 35 V41 L80 44 L75 41 V35 Z" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+                  <rect x="144" y="34" width="8" height="6" rx="2" fill="#fff"/>
+                  <rect x="8" y="34" width="6" height="6" rx="2" fill="#ffc400"/>
+                  <g><circle cx="38" cy="50" r="11" fill="#141416"/><g class="roda"><circle cx="38" cy="50" r="6" fill="#d7ddd8"/><rect x="36.5" y="41" width="3" height="18" fill="#8d948f"/><rect x="29" y="48.5" width="18" height="3" fill="#8d948f"/></g></g>
+                  <g><circle cx="122" cy="50" r="11" fill="#141416"/><g class="roda"><circle cx="122" cy="50" r="6" fill="#d7ddd8"/><rect x="120.5" y="41" width="3" height="18" fill="#8d948f"/><rect x="113" y="48.5" width="18" height="3" fill="#8d948f"/></g></g>
+                </svg>
+              </div>
+            </div>
+            <div class="perfuracao" aria-hidden="true"></div>
+            <dl class="ticket-corpo">
+              <div><dt>Dia da corrida</dt><dd id="tDia">—</dd></div>
+              <div><dt>Motorista</dt><dd id="tMot">—</dd></div>
+              <div><dt>Ordem de serviço</dt><dd id="tOS">—</dd></div>
+            </dl>
+            <p class="ticket-rodape" id="rodapeBilhete">Orgulho de estar aqui.</p>
+          </article>
+
+          <div class="acoes">
+            <button id="btnSortear" class="btn btn-ouro" disabled>Sortear</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="barraVertical" class="barra-vertical">
+      <button id="btnGravarBarra" class="btn btn-claro btn-pequeno" disabled>Gravar vídeo (10 s)</button>
+      <button id="btnImagemBarra" class="btn btn-claro btn-pequeno" disabled>Salvar imagem</button>
+      <button id="btnSairVertical" class="btn btn-claro btn-pequeno">Sair do modo vertical (Esc)</button>
+    </div>
+
+    <div id="gravacao" class="gravacao" hidden>
+      <div class="gravacao-info">
+        <span id="gravStatus">Gravando…</span>
+        <div class="gravacao-barra"><div id="gravProgresso"></div></div>
+        <button id="gravCancelar" class="btn btn-claro btn-pequeno">Cancelar (Esc)</button>
+      </div>
+      <div id="gravPalco" class="gravacao-palco"></div>
+    </div>
+
+    <div id="histOverlay" class="sobreposicao" hidden>
+      <div class="caixa-hist" role="dialog" aria-modal="true" aria-labelledby="histTitulo">
+        <header class="hist-topo">
+          <h3 id="histTitulo">Histórico de sorteios</h3>
+          <button id="histFechar" class="btn btn-claro btn-pequeno">Fechar</button>
+        </header>
+        <div class="hist-ferramentas">
+          <input id="histBusca" type="search" placeholder="Buscar por nome, motorista ou O.S">
+          <span id="histContagem" class="dica"></span>
+        </div>
+        <div class="hist-rolagem">
+          <table class="tabela">
+            <thead><tr><th>Nº</th><th>Data e hora</th><th>Passageiro(a)</th><th>Dia da corrida</th><th>Motorista</th><th>O.S</th><th>Sorteio</th></tr></thead>
+            <tbody id="histCorpo"></tbody>
+          </table>
+          <p id="histVazio" class="dica">Nenhum sorteio encontrado.</p>
+        </div>
+        <p class="hist-aviso">Telefones não aparecem aqui. Para entrar em contato, use <strong>Salvar em Excel (com contato)</strong>.</p>
+      </div>
+    </div>
+
+    <div id="contatoOverlay" class="sobreposicao" hidden>
+      <div class="caixa-contato" role="dialog" aria-modal="true" aria-labelledby="cNome">
+        <header class="contato-topo">
+          <span class="etiqueta">Contato da pessoa sorteada</span>
+          <button id="btnFecharContato" class="btn btn-claro btn-pequeno">Fechar</button>
+        </header>
+        <h3 id="cNome"></h3>
+        <p id="cDetalhes" class="dica"></p>
+        <dl class="contato-lista">
+          <div>
+            <dt>Telefone</dt>
+            <dd><span id="cTel" class="valor"></span><button id="btnCopiarTel" class="btn btn-claro btn-pequeno">Copiar</button></dd>
+          </div>
+          <div>
+            <dt>E-mail</dt>
+            <dd><span id="cEmail" class="valor"></span><button id="btnCopiarEmail" class="btn btn-claro btn-pequeno">Copiar</button></dd>
+          </div>
+        </dl>
+        <p id="cAjuda" class="dica" hidden>Não encontrado? Confira se as colunas de telefone e e-mail estão escolhidas na barra lateral e se a planilha do sorteio está aberta.</p>
+        <p class="contato-aviso">Dados pessoais — uso interno. Feche esta aba antes de compartilhar a tela.</p>
+      </div>
+    </div>
+
+    <div id="abertura" class="abertura" aria-hidden="true">
+      <div class="abertura-miolo">
+        <img id="aberturaImg" alt="Urbano Norte">
+        <p>Orgulho de estar aqui.</p>
+      </div>
+      <small>Clique para pular</small>
+    </div>
+  </div>
+  <script src="renderer.js"></script>
+  <script src="historico.js"></script>
+  <script src="fundo.js"></script>
+  <script src="vertical.js"></script>
+  <script src="vendor/mp4-muxer.js"></script>
+  <script src="logo.js"></script>
+  <script src="video.js"></script>
+  <script src="tema.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+name: Sorteio (desktop) - gerar instaladores
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['sorteio-v*']
+
+jobs:
+  build:
+    defaults:
+      run:
+        working-directory: sorteio/desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: sorteio/desktop/package.json
+      - run: npm install
+      - name: Gerar .exe
+        if: matrix.os == 'windows-latest'
+        run: npm run build:win
+      - name: Gerar .dmg
+        if: matrix.os == 'macos-latest'
+        run: npm run build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ matrix.os }}
+          path: |
+            sorteio/desktop/dist/*.exe
+            sorteio/desktop/dist/*.dmg

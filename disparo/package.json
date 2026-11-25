@@ -1,0 +1,61 @@
+{
+  "name": "disparo-urbano-norte",
+  "version": "0.1.0",
+  "description": "Disparo de campanhas por WhatsApp - Urbano Norte",
+  "main": "src/main.js",
+  "author": "Urbano Norte",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/outfit": "^5.3.0",
+    "axe-core": "^4.14.1",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.urbanonorte.disparo",
+    "productName": "Disparo Urbano Norte",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.business"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "afterSign": "scripts/adhoc-sign.js"
+  }
+}

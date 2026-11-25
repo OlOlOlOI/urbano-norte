@@ -1,0 +1,25 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  abrirPlanilha: () => ipcRenderer.invoke('abrir-planilha'),
+  obterTitulos: (aba, linha) => ipcRenderer.invoke('obter-titulos', { aba, linha }),
+  extrairColunas: (aba, linha, colunas) => ipcRenderer.invoke('extrair-colunas', { aba, linha, colunas }),
+  temaObter: () => ipcRenderer.invoke('tema-obter'),
+  temaSalvar: (tema) => ipcRenderer.invoke('tema-salvar', tema),
+  temaEscolherLogo: () => ipcRenderer.invoke('tema-escolher-logo'),
+  historicoObter: () => ipcRenderer.invoke('historico-obter'),
+  historicoAdicionar: (item, contexto) => ipcRenderer.invoke('historico-adicionar', { item, contexto }),
+  janelaVertical: (ativo) => ipcRenderer.invoke('janela-vertical', { ativo }),
+  pastaObter: () => ipcRenderer.invoke('pasta-obter'),
+  pastaEscolher: () => ipcRenderer.invoke('pasta-escolher'),
+  pastaDireto: (valor) => ipcRenderer.invoke('pasta-direto', { valor }),
+  pastaAbrir: () => ipcRenderer.invoke('pasta-abrir'),
+  mostrarNoExplorador: (caminho) => ipcRenderer.invoke('mostrar-no-explorador', caminho),
+  assetAbertura: () => ipcRenderer.invoke('asset-abertura'),
+  salvarVideo: (bytes, sugestao, ext) => ipcRenderer.invoke('salvar-video', { bytes, sugestao, ext }),
+  salvarImagem: (dataUrl, sugestao) => ipcRenderer.invoke('salvar-imagem', { dataUrl, sugestao }),
+  contatoObter: (id, contexto) => ipcRenderer.invoke('contato-obter', { id, contexto }),
+  copiar: (valor) => ipcRenderer.invoke('copiar', valor),
+  historicoLimpar: () => ipcRenderer.invoke('historico-limpar'),
+  exportarHistorico: (contexto) => ipcRenderer.invoke('exportar-historico', { contexto }),
+});

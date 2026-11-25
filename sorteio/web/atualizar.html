@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atualizar - Sorteio Urbano Norte</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #2b2a2c; color: #fff; font-family: system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+  h1 { font-size: 24px; margin: 0 0 10px; } p { color: #b8c2b9; font-size: 16px; line-height: 1.4; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="t">Atualizando…</h1>
+  <p id="m">Aguarde um instante. Seu histórico e seus contatos não são apagados.</p>
+</main>
+<script>
+(async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const ks = await caches.keys();
+      await Promise.all(ks.map((k) => caches.delete(k)));
+    }
+    document.getElementById('t').textContent = 'Pronto!';
+    document.getElementById('m').textContent = 'Abrindo a versão nova…';
+  } catch (e) {
+    document.getElementById('t').textContent = 'Quase lá';
+    document.getElementById('m').textContent = 'Abrindo o aplicativo…';
+  }
+  setTimeout(() => { location.replace('index.html?atualizado=' + Date.now()); }, 900);
+})();
+</script>
+</body>
+</html>

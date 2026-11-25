@@ -1,0 +1,18 @@
+{
+  "name": "Sorteio Urbano Norte",
+  "short_name": "Sorteio UN",
+  "description": "Sorteio de corridas da Urbano Norte a partir de uma planilha. Tudo fica neste aparelho.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2b2a2c",
+  "theme_color": "#2b2a2c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

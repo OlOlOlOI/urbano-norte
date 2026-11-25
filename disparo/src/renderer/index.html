@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Disparo Urbano Norte</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="pular" href="#principal">Pular para o conteúdo</a>
+
+  <header class="topo">
+    <div class="marca">
+      <span class="marca-nome">Urbano Norte</span>
+      <span class="marca-produto">Disparo de mensagens</span>
+    </div>
+    <nav id="menu" aria-label="Principal">
+      <button type="button" data-rota="campanha">Nova campanha</button>
+      <button type="button" data-rota="sair">Quem pediu para sair</button>
+      <button type="button" data-rota="historico">Histórico</button>
+      <button type="button" data-rota="config" class="config">Configurações</button>
+    </nav>
+  </header>
+
+  <aside id="modo" class="modo" aria-label="Modo de envio"></aside>
+
+  <main id="principal" tabindex="-1">
+    <div id="aviso-status" class="aviso oculto" role="status"></div>
+    <div id="aviso-erro" class="aviso erro oculto" role="alert"></div>
+    <div id="tela"></div>
+  </main>
+
+  <dialog id="dialogo" aria-labelledby="dialogo-titulo"></dialog>
+  <script src="renderer.js"></script>
+</body>
+</html>

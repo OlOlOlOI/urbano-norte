@@ -1,0 +1,138 @@
+/* Versão web: ajustes gerais e MODO CELULAR (tela única + barra de navegação embaixo) */
+html:not(.web) .so-web { display: none; }
+html.web, html.web body { height: 100%; }
+html.web { background: #2b2a2c; } /* faixas que o Safari deixa sem página (barra de baixo) ficam escuras, como a barra de navegação */
+html.web body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; overflow: hidden; position: fixed; inset: 0; width: 100%; } /* a página não 'anda' quando o teclado abre */
+html.web .app { height: 100vh; height: 100dvh; }
+
+html.web #btnPasta, html.web #btnAbrirPasta, html.web #pastaAtual, html.web #btnMostrarSalvo,
+html.web label.check:has(#pastaDireto), html.web #blocoVertical .linha-botoes { display: none; }
+
+.caixa-pin { width: min(380px, 100%); }
+.caixa-pin h3 { font-size: 26px; }
+.caixa-pin label { display: block; margin-top: 14px; font-size: 13px; color: var(--cinza); }
+.caixa-pin input { display: block; width: 100%; margin-top: 6px; padding: 12px 14px; font-size: 22px; letter-spacing: .4em; text-align: center; border: 2px solid var(--linha); border-radius: 10px; font-family: inherit; color: var(--carvao); }
+.caixa-pin input:focus { outline: none; border-color: var(--verde); }
+.caixa-pin .erro { color: #c0392b; min-height: 18px; }
+.caixa-pin .linha-botoes { margin-top: 14px; display: flex; gap: 10px; }
+.caixa-pin .btn-ouro { font-size: 15px; padding: 12px 22px; box-shadow: none; text-transform: none; letter-spacing: 0; }
+
+/* Elementos que só existem no celular ficam escondidos no computador */
+.abas, .vazio-mobile, .info-mobile, .acoes-extra, .btn-ir-sorteio { display: none; }
+
+@media (max-width: 760px), (pointer: coarse) and (max-width: 900px) {
+  :root { --altura-abas: calc(64px + env(safe-area-inset-bottom)); }
+  html.web .app, html.web .app.sem-lateral { display: block; position: relative; }
+  html.web .palco-casca { height: 100%; }
+  html.web input, html.web select, html.web textarea { font-size: 16px; } /* evita o zoom automático do iPhone */
+  html.web .btn { min-height: 46px; }
+
+  /* Navegação fixa embaixo */
+  html.web .abas { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: var(--altura-abas); padding-bottom: env(safe-area-inset-bottom); background: var(--carvao); border-top: 3px solid var(--verde); }
+  html.web .abas button { background: none; border: 0; color: #aab3ab; font: inherit; font-size: 11.5px; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  html.web .abas button svg { width: 24px; height: 24px; }
+  html.web .abas button.ativa { color: var(--lima); }
+  html.web .abas button:disabled { opacity: .35; }
+  html.web .app.vertical .abas, html.web .app.vertical .acoes-extra { display: none; }
+
+  /* Ajustes: tela cheia que sobe por cima do sorteio */
+  html.web .app .config { display: block; position: fixed; inset: 0 0 var(--altura-abas) 0; z-index: 35; border-right: 0; padding: calc(16px + env(safe-area-inset-top)) 16px 24px; transform: translateY(104%); visibility: hidden; transition: transform .28s ease, visibility 0s .28s; overscroll-behavior: contain; }
+  html.web .app.ajustes-abertos .config { transform: none; visibility: visible; transition: transform .28s ease; }
+  html.web .app.vertical .config { display: none; }
+  html.web .config-topo { margin-bottom: 18px; }
+  html.web .btn-icone { width: 44px; height: 44px; font-size: 18px; }
+  html.web #btnOcultar { font-size: 0; }
+  html.web #btnOcultar::before { content: "\2715"; font-size: 17px; }
+  html.web .btn-ir-sorteio { display: block; position: sticky; bottom: 0; width: 100%; margin: 8px 0 0; font-size: 16px; padding: 13px 18px; box-shadow: 0 -10px 18px var(--carvao), 0 4px 0 var(--sombra-botao); }
+  html.web .btn-mostrar, html.web .app .btn-mostrar, html.web .btn-contato { display: none !important; }
+  html.web .config section > h2 { cursor: pointer; margin-bottom: 0; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
+  html.web .config section > h2::after { content: ""; margin-left: auto; width: 9px; height: 9px; border-right: 2px solid #aab3ab; border-bottom: 2px solid #aab3ab; transform: rotate(45deg) translateY(-2px); transition: transform .2s; }
+  html.web .config section.fechada > h2::after { transform: rotate(-45deg); }
+  html.web .config section.fechada > :not(h2) { display: none; }
+  html.web .config section > :nth-child(2) { margin-top: 4px; }
+  html.web .config section { margin-bottom: 8px; border-bottom: 1px solid #3a393c; padding-bottom: 8px; }
+
+  /* Tela do sorteio */
+  html.web .palco { padding: calc(14px + env(safe-area-inset-top)) 16px calc(var(--altura-abas) + 18px); justify-content: flex-start; }
+  html.web .cena { justify-content: flex-start; gap: 0; padding-top: 4px; }
+  html.web .app:not(.vertical) .cabecalho-vertical { display: none; } /* o bilhete já tem a logo */
+  html.web .nome-sorteio { margin-bottom: 10px; font-size: 15px; }
+
+  /* Sem planilha: só o convite para começar */
+  html.web .app:not(.com-planilha):not(.vertical) .vazio-mobile { display: flex; }
+  html.web .app:not(.com-planilha):not(.vertical) :is(#ticket, .acoes, .acoes-extra, .nome-sorteio) { display: none; }
+  .vazio-mobile { flex-direction: column; align-items: center; text-align: center; gap: 12px; margin: 6vh 0 0; padding: 28px 22px 26px; width: 100%; background: var(--papel); border-radius: 16px; border-top: 7px solid var(--verde); box-shadow: 0 14px 34px rgba(43, 42, 44, .14); }
+  .vazio-mobile img { width: 84px; height: auto; }
+  .vazio-mobile h2 { font-size: 28px; font-weight: 800; line-height: 1.05; }
+  .vazio-mobile p { font-size: 15px; color: var(--cinza); line-height: 1.4; }
+  .vazio-mobile .btn-ouro { width: 100%; margin-top: 6px; font-size: 18px; padding: 15px 20px; }
+
+  html.web .app.com-planilha .info-mobile:not([hidden]) { display: block; }
+  .info-mobile { width: 100%; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: rgba(255, 255, 255, .82); border: 1px solid var(--linha); font-size: 13px; font-weight: 600; color: var(--cinza); text-align: center; }
+
+  /* Bilhete compacto */
+  html.web .ticket { border-radius: 14px; }
+  html.web .ticket-topo { padding: 14px 18px 18px; min-height: 118px; border-top-width: 6px; }
+  html.web .ticket-topo span { font-size: 13px; }
+  html.web .ticket-topo strong { font-size: 30px; padding-right: 56px; margin-top: 6px; }
+  html.web .logo-bilhete { width: 42px; top: 14px; right: 14px; }
+  html.web .perfuracao { height: 22px; }
+  html.web .perfuracao::before, html.web .perfuracao::after { width: 22px; height: 22px; }
+  html.web .perfuracao::before { left: -11px; } html.web .perfuracao::after { right: -11px; }
+  html.web .ticket-corpo { padding: 8px 18px 12px; gap: 10px; }
+  html.web .ticket-corpo div { grid-template-columns: 1fr; gap: 1px; }
+  html.web .ticket-corpo dt { font-size: 12.5px; }
+  html.web .ticket-corpo dd { font-size: 20px; }
+  html.web .ticket-rodape { padding: 9px 18px 13px; font-size: 13px; }
+
+  /* Botão de sortear grande, no alcance do polegar */
+  html.web .acoes { width: 100%; margin: 16px 0 0; }
+  html.web .btn-ouro { width: 100%; padding: 17px 20px; font-size: 21px; }
+  html.web .app.com-planilha .acoes-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 14px; }
+  html.web .acoes-extra .btn { font-size: 14px; padding: 11px 8px; min-height: 46px; }
+
+  /* Janelas */
+  /* Janelas no MEIO da tela; seguem a área visível quando o teclado abre */
+  /* O fundo escuro cobre a tela toda; a janela fica centralizada na parte visível (acima do teclado) */
+  html.web .sobreposicao { inset: 0; padding: calc(12px + var(--vvt, 0px)) 12px calc(12px + var(--vvb, 0px)); align-items: center; justify-content: center; }
+  html.web .caixa-hist { width: 100%; max-height: 100%; border-radius: 16px; }
+  html.web .caixa-contato, html.web .caixa-pin, html.web .caixa-video { width: 100%; max-height: 100%; overflow-y: auto; border-radius: 16px; padding: 18px; }
+  html.web .caixa-contato h3 { font-size: 24px; }
+  html.web .hist-topo, html.web .hist-ferramentas, html.web .hist-aviso { padding-left: 14px; padding-right: 14px; }
+  html.web .hist-rolagem { padding: 0 8px; min-height: 48px; }
+  html.web .caixa-hist .hist-aviso { padding-top: 8px; padding-bottom: 12px; font-size: 12px; }
+  html.web .hist-topo h3 { font-size: 17px; }
+  html.web .tabela th:nth-child(n+4), html.web .tabela td:nth-child(n+4) { display: none; } /* no celular: Nº, data e nome; toque na linha para abrir */
+  html.web .tabela td:nth-child(3) { font-size: 15px; }
+  html.web #blocoVertical #btnVertical { display: none; } /* o app já é em pé no celular */
+  html.web .barra-vertical .btn { min-height: 40px; }
+}
+
+/* Gravação: a imagem mantém a proporção 9:16 (sem esticar) e respeita a área do relógio/ilha do iPhone */
+/* As faixas em cima e embaixo da prévia usam o mesmo fundo claro do vídeo (nada de borda preta) */
+html.web .gravacao { background-color: #f1f4f1; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='155.88' viewBox='0 0 60 103.92'%3E%3Cpath d='M30 0 L60 17.32 L60 51.96 L30 69.28 L0 51.96 L0 17.32 Z M30 69.28 L30 103.92' fill='none' stroke='%2300a651' stroke-opacity='0.11' stroke-width='1.1'/%3E%3C/svg%3E"); }
+html.gravando, html.gravando body { background: #f1f4f1; }
+html.web .gravacao-palco canvas { width: min(100vw, calc(100vh * 9 / 16)); width: min(100vw, calc(100dvh * 9 / 16)); height: auto; max-width: none; aspect-ratio: 9 / 16; }
+html.web .gravacao-info { top: calc(14px + env(safe-area-inset-top)); }
+
+/* Janela "Vídeo pronto" */
+.caixa-video { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.video-preview { width: 100%; max-height: 52vh; max-height: 52dvh; background: #141416; border-radius: 12px; display: block; object-fit: contain; }
+.caixa-video .btn-ouro { width: 100%; font-size: 18px; padding: 15px 20px; text-transform: none; letter-spacing: 0; }
+.caixa-video .btn-claro { width: 100%; }
+.btn-largo { grid-column: 1 / -1; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 900px) {
+  html.web .gravacao-info { left: 12px; right: 12px; gap: 10px; padding: 8px 10px; font-size: 13px; }
+  html.web .gravacao-barra { flex: 1; width: auto; min-width: 40px; }
+  html.web .gravacao-info #gravStatus { white-space: nowrap; }
+}
+
+.btn-link { background: none; border: 0; padding: 12px 0 0; font: inherit; font-size: 14px; color: var(--cinza); text-decoration: underline; cursor: pointer; display: block; margin: 0 auto; }
+.btn-link[hidden] { display: none; }
+.pin-check { display: flex !important; align-items: center; gap: 10px; font-size: 14px; color: var(--carvao); }
+.pin-check[hidden] { display: none !important; }
+.pin-check input { display: inline-block; width: 22px; height: 22px; margin: 0; letter-spacing: 0; accent-color: var(--verde); }
+.caixa-pin .pin-botoes { flex-wrap: wrap; }
+.caixa-pin .pin-botoes .btn { flex: 1 1 auto; }
+.caixa-pin .btn[hidden] { display: none; }
+.caixa-pin label[hidden] { display: none !important; }

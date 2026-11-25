@@ -1,0 +1,74 @@
+{
+  "name": "sorteio-urbano-norte",
+  "version": "1.12.0",
+  "description": "Sorteio de corridas - Urbano Norte",
+  "main": "main.js",
+  "author": "Urbano Norte",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --publish never",
+    "build:mac": "electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "br.com.urbanonorte.sorteio",
+    "productName": "Sorteio Urbano Norte",
+    "files": [
+      "main.js",
+      "preload.js",
+      "leitor.js",
+      "renderer/**/*",
+      "package.json",
+      "build/icon-win.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon-win.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Sorteio-Urbano-Norte-Instalador-${version}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "Sorteio-Urbano-Norte-${version}-${arch}.${ext}",
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "Sorteio-Urbano-Norte-Portatil-${version}.${ext}"
+    }
+  }
+}
