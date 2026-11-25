@@ -36,6 +36,8 @@ function explicarErro(corpo, status) {
 
 /** +5564999998888 -> 5564999998888 (a API usa só dígitos). */
 const paraApi = (e164) => String(e164 || '').replace(/\D/g, '');
+/** 5564992937605 -> 556492937605; null se não for celular brasileiro com 9. */
+const semNonoDigito = (d) => { const m = /^55(\d{2})9(\d{8})$/.exec(d); return m ? `55${m[1]}${m[2]}` : null; };
 
 /**
  * @param {object} p
@@ -64,11 +66,20 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
     return { ok: true, dados: json };
   }
 
+  const postar = (para, conteudo) => chamar(`${numeroId}/messages`, {
+    metodo: 'POST',
+    corpo: { messaging_product: 'whatsapp', recipient_type: 'individual', to: para, ...conteudo },
+  });
+
   async function mensagem(telefone, conteudo) {
-    const r = await chamar(`${numeroId}/messages`, {
-      metodo: 'POST',
-      corpo: { messaging_product: 'whatsapp', recipient_type: 'individual', to: paraApi(telefone), ...conteudo },
-    });
+    let r = await postar(paraApi(telefone), conteudo);
+    // Celular do Brasil: o WhatsApp às vezes registra o número sem o 9 extra (5564 9 9293-7605 -> 5564 9293-7605).
+    // Se a Meta disser que o número não está autorizado, tenta de novo sem o 9.
+    const semNove = semNonoDigito(paraApi(telefone));
+    if (!r.ok && r.codigo === 131030 && semNove) {
+      const r2 = await postar(semNove, conteudo);
+      if (r2.ok) r = r2;
+    }
     if (!r.ok) return r;
     const id = r.dados && r.dados.messages && r.dados.messages[0] && r.dados.messages[0].id;
     return { ok: true, id };

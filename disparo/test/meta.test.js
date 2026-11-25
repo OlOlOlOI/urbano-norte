@@ -59,3 +59,15 @@ test('recusa ID com letras e token vazio', () => {
   assert.throws(() => criarProvedorMeta({ numeroId: 'abc', token: 't' }), /só números/);
   assert.throws(() => criarProvedorMeta({ numeroId: '1', token: '' }), /token/);
 });
+
+test('celular do Brasil: se a Meta recusar como não autorizado, tenta de novo sem o 9', async () => {
+  const enviados = [];
+  const f = async (url, o) => {
+    const c = JSON.parse(o.body); enviados.push(c.to);
+    const ok = c.to === '556492937605';
+    return { ok, status: ok ? 200 : 400, json: async () => (ok ? { messages: [{ id: 'wamid.OK' }] } : { error: { code: 131030, message: 'not in allowed list' } }) };
+  };
+  const r = await criarProvedorMeta({ numeroId: '1', token: 't', fetch: f }).enviarModelo({ telefone: '+5564992937605', modelo: 'hello_world', idioma: 'en_US' });
+  assert.deepStrictEqual(enviados, ['5564992937605', '556492937605']);
+  assert.strictEqual(r.ok, true);
+});
