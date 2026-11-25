@@ -94,11 +94,25 @@ async function telaConfig() {
     h('label', { for: 'cfg-operador' }, 'Seu nome', h('span', { class: 'ajuda' }, 'Aparece nas suas respostas, para a equipe saber quem respondeu. O cliente não vê.')), operador,
     h('div', { class: 'acoes' }, salvar,
       c.configurado ? h('button', { type: 'button', class: 'btn', onclick: () => iniciar() }, 'Voltar') : null,
+      c.configurado ? h('button', { type: 'button', class: 'btn', id: 'btn-diagnostico', onclick: diagnosticar }, 'Conferir ligação com o WhatsApp') : null,
       c.configurado ? h('button', { type: 'button', class: 'btn discreto', onclick: async () => {
         if (await confirmar('Desconectar este computador?', 'O endereço e a chave saem deste computador. As conversas continuam no servidor.', 'Desconectar')
           && await chamar(window.api.config.apagar())) { await iniciar(); }
       } }, 'Desconectar este computador') : null)));
   (c.url ? operador : url).focus();
+}
+
+async function diagnosticar() {
+  const b = $('#btn-diagnostico');
+  b.disabled = true; b.textContent = 'Conferindo com a Meta…';
+  const r = await window.api.diagnostico();
+  b.disabled = false; b.textContent = 'Conferir ligação com o WhatsApp';
+  const d = limpar($('#dialogo'));
+  const passos = r.ok ? r.dados.passos : [{ item: 'Servidor do Atendimento', ok: false, detalhe: r.erro }];
+  d.append(h('h2', { id: 'dialogo-titulo' }, 'Ligação com o WhatsApp'),
+    h('ul', { class: 'diagnostico' }, passos.map((p) => h('li', { class: p.ok ? 'ok' : 'falha' }, h('strong', {}, (p.ok ? '✓ ' : '✗ ') + p.item), h('div', {}, p.detalhe || '')))),
+    h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn principal', autofocus: true, onclick: () => d.close() }, 'Fechar')));
+  d.showModal();
 }
 
 function confirmar(titulo, texto, sim) {

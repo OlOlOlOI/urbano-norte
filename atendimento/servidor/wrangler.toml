@@ -6,6 +6,7 @@ compatibility_date = "2026-11-01"
 
 [vars]
 PHONE_NUMBER_ID = "1373163822556154"  # número de TESTE da Meta (+1); trocar pelo brasileiro
+WABA_ID = "1146655898265244"          # conta do WhatsApp Business (Identificação da conta de mensagens)
 
 [[d1_databases]]
 binding = "DB"

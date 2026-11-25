@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   resolver: chamar('atendimento:resolver'),
   reabrir: chamar('atendimento:reabrir'),
   midia: chamar('atendimento:midia'),
+  diagnostico: chamar('atendimento:diagnostico'),
   aoAtualizar: ouvir('atendimento:atualizou'),
   aoAbrir: ouvir('atendimento:abrir'),
 });

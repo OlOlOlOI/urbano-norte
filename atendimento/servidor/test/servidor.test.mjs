@@ -190,3 +190,32 @@ test('página pública de privacidade (exigida pela Meta)', async () => {
   assert.match(r.headers.get('Content-Type'), /text\/html/);
   assert.match(await r.text(), /apagar seus dados/);
 });
+
+test('diagnóstico: confere o token e liga a conta do WhatsApp ao app quando falta', async () => {
+  const env = { ...ambiente(), WABA_ID: '777' };
+  const original = globalThis.fetch;
+  const chamadas = [];
+  globalThis.fetch = async (url, op = {}) => {
+    chamadas.push(`${op.method || 'GET'} ${String(url).replace('https://graph.facebook.com/v27.0/', '')}`);
+    if (String(url).includes('fields=')) return Response.json({ display_phone_number: '+1 555 0100', verified_name: 'Test Number' });
+    if (String(url).endsWith('/subscribed_apps') && (op.method || 'GET') === 'GET') return Response.json({ data: [] });
+    return Response.json({ success: true });
+  };
+  try {
+    const r = await (await api(env, '/api/diagnostico', { method: 'POST' })).json();
+    assert.strictEqual(r.ok, true);
+    assert.deepStrictEqual(chamadas, ['GET 999?fields=display_phone_number,verified_name', 'GET 777/subscribed_apps', 'POST 777/subscribed_apps']);
+    assert.match(r.passos[1].detalhe, /ligada agora/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('diagnóstico: token vencido aparece explicado', async () => {
+  const env = { ...ambiente(), WABA_ID: '777' };
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 190, message: 'expired' } }), { status: 401 });
+  try {
+    const r = await (await api(env, '/api/diagnostico', { method: 'POST' })).json();
+    assert.strictEqual(r.ok, false);
+    assert.match(r.passos[0].detalhe, /token/i);
+  } finally { globalThis.fetch = original; }
+});

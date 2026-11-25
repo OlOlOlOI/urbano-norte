@@ -209,6 +209,27 @@ async function rotaApi(request, env, caminho) {
     return json({ ok: true, numero: env.PHONE_NUMBER_ID || null, versao: 1 });
   }
 
+  // Confere a ligação com a Meta e corrige o que dá: token válido? a conta do WhatsApp (WABA) assina este app?
+  // Sem essa assinatura a Meta não manda as mensagens dos clientes, mesmo com o webhook cadastrado.
+  if (request.method === 'POST' && caminho === '/api/diagnostico') {
+    const passos = [];
+    const numero = await graph(env, `${env.PHONE_NUMBER_ID}?fields=display_phone_number,verified_name`);
+    passos.push({ item: 'Token do WhatsApp e número', ok: numero.ok, detalhe: numero.ok ? `${numero.dados.display_phone_number} (${numero.dados.verified_name || 'sem nome'})` : numero.erro });
+    if (!env.WABA_ID) {
+      passos.push({ item: 'Conta do WhatsApp (WABA)', ok: false, detalhe: 'WABA_ID não configurado no wrangler.toml.' });
+    } else if (numero.ok) {
+      const lista = await graph(env, `${env.WABA_ID}/subscribed_apps`);
+      const assinado = lista.ok && (lista.dados.data || []).length > 0;
+      if (assinado) {
+        passos.push({ item: 'Conta do WhatsApp manda mensagens para este app', ok: true, detalhe: 'já estava ligada' });
+      } else {
+        const r = await graph(env, `${env.WABA_ID}/subscribed_apps`, { method: 'POST' });
+        passos.push({ item: 'Conta do WhatsApp manda mensagens para este app', ok: r.ok, detalhe: r.ok ? 'ligada agora' : (lista.ok ? r.erro : lista.erro) });
+      }
+    }
+    return json({ ok: passos.every((p) => p.ok), passos });
+  }
+
   if (request.method === 'GET' && caminho === '/api/conversas') {
     const estado = url.searchParams.get('estado');
     const busca = (url.searchParams.get('busca') || '').trim();

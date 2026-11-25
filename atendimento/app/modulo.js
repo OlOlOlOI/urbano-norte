@@ -155,6 +155,7 @@ function registrarIpc() {
     return { aberto: true };
   });
 
+  h('atendimento:diagnostico', () => chamarServidor('/api/diagnostico', { metodo: 'POST' }));
   h('atendimento:visivel', () => visivel());
 }
 
