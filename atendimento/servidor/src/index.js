@@ -142,13 +142,16 @@ export function lerMensagemInstagram(ev, contato) {
     else if (url) midia = { id: `${m.mid}_0`.replace(/[^\w-]/g, '').slice(-120), url, mime: { image: 'image/jpeg', audio: 'audio/mp4', video: 'video/mp4' }[tipo] || null, nome: null };
   }
   if (m.reply_to && m.reply_to.story) texto = `↩ Respondeu ao seu Story${texto ? ': ' + texto : ''}`;
-  return { id: m.mid, waId: contato, tipo, texto, midia, quando: Number(ev.timestamp) || agora() };
+  const ts = Number(ev.timestamp) || 0;
+  return { id: m.mid, waId: contato, tipo, texto, midia, quando: ts ? (ts < 1e12 ? ts * 1000 : ts) : agora() };
 }
 
 async function perfilInstagram(env, igsid) {
   if (!env || !env.IG_TOKEN) return {};
   try {
-    const r = await fetch(`${(await idDoInstagram(env)) ? GRAPH : GRAPH_IG}/${igsid}?fields=name,username`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+    const pagina = await paginaDoInstagram(env);
+    const base = pagina || (await idDoInstagram(env)) ? GRAPH : GRAPH_IG;
+    const r = await fetch(`${base}/${igsid}?fields=name,username`, { headers: { Authorization: `Bearer ${pagina ? pagina.token : env.IG_TOKEN}` } });
     const d = await r.json();
     return r.ok ? { nome: d.name || null, usuario: d.username || null } : {};
   } catch { return {}; }
@@ -202,6 +205,22 @@ async function processarInstagram(db, corpo, env) {
 // Descobre sozinho o ID da conta do Instagram quando o token é do Facebook (começa com "EAA") e o IG_ID não foi
 // configurado: procura a conta do Instagram ligada às Páginas que o token enxerga. Fica guardado enquanto o servidor roda.
 let igIdDescoberto = null;
+let paginaIg = null; // { id, token } da Página do Facebook ligada ao Instagram (token da Página: exigido para perfil e envio)
+
+/** Com token do Facebook (EAA…), as chamadas de mensagens do Instagram usam o token da Página ligada à conta. */
+async function paginaDoInstagram(env) {
+  if (!String(env.IG_TOKEN || '').startsWith('EAA')) return null;
+  if (paginaIg && paginaIg.de === env.IG_TOKEN) return paginaIg;
+  paginaIg = null;
+  const igId = await idDoInstagram(env);
+  try {
+    const r = await fetch(`${GRAPH}/me/accounts?fields=id,access_token,instagram_business_account&limit=100`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+    const d = await r.json();
+    const p = (d.data || []).find((x) => x.instagram_business_account && (!igId || x.instagram_business_account.id === igId));
+    if (p) paginaIg = { id: p.id, token: p.access_token, de: env.IG_TOKEN };
+  } catch { /* sem rede: tenta na próxima */ }
+  return paginaIg;
+}
 async function idDoInstagram(env) {
   // token do Instagram (IG...): usa graph.instagram.com/me, sem ID; token do Facebook (EAA...): graph.facebook.com/{ID}
   if (String(env.IG_TOKEN || '').startsWith('IG')) return null;
@@ -221,10 +240,12 @@ async function instagram(env, caminho, opcoes = {}) {
   // login unificado (apps novos): graph.facebook.com/{IG_ID}/...; login do Instagram (antigo): graph.instagram.com/me/...
   const igId = await idDoInstagram(env);
   const base = igId ? GRAPH : GRAPH_IG;
-  const alvo = igId ? caminho.replace(/^me(?=[/?]|$)/, igId) : caminho;
+  // mensagens (enviar / visto) com token do Facebook vão pela Página, com o token da Página
+  const pagina = /^me\/messages/.test(caminho) ? await paginaDoInstagram(env) : null;
+  const alvo = pagina ? caminho.replace(/^me/, pagina.id) : igId ? caminho.replace(/^me(?=[/?]|$)/, igId) : caminho;
   let r;
   try {
-    r = await fetch(`${base}/${alvo}`, { ...opcoes, headers: { Authorization: `Bearer ${env.IG_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}) } });
+    r = await fetch(`${base}/${alvo}`, { ...opcoes, headers: { Authorization: `Bearer ${pagina ? pagina.token : env.IG_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}) } });
   } catch { return { ok: false, erro: 'Sem conexão com o Instagram.' }; }
   let dados = null;
   try { dados = await r.json(); } catch { /* sem JSON */ }
@@ -406,6 +427,18 @@ async function rotaApi(request, env, caminho) {
         const r = await instagram(env, 'me/subscribed_apps?subscribed_fields=messages,message_reactions,messaging_seen', { method: 'POST' });
         passos.push({ item: 'Instagram manda as mensagens diretas para este app', ok: r.ok, detalhe: r.ok ? 'ligado' : r.erro });
       }
+    }
+    if (env.IG_TOKEN) {
+      const { results: semNome } = await db.prepare("SELECT wa_id FROM conversas WHERE canal = 'instagram' AND (nome IS NULL OR usuario IS NULL) LIMIT 50").all();
+      let preenchidos = 0;
+      for (const c of semNome) {
+        const perfil = await perfilInstagram(env, c.wa_id.slice(3));
+        if (perfil.nome || perfil.usuario) {
+          await db.prepare('UPDATE conversas SET nome = COALESCE(?, nome), usuario = COALESCE(?, usuario), atualizada_em = ? WHERE wa_id = ?').bind(perfil.nome || null, perfil.usuario || null, agora(), c.wa_id).run();
+          preenchidos++;
+        }
+      }
+      if (semNome.length) passos.push({ item: 'Nomes dos perfis do Instagram', ok: preenchidos === semNome.length, detalhe: `${preenchidos} de ${semNome.length} conversa(s) com nome e @ preenchidos` });
     }
     // ok: o diagnóstico rodou; tudoCerto: todos os itens passaram (o app mostra cada item com ✓ ou ✗)
     return json({ ok: true, tudoCerto: passos.every((p) => p.ok), passos });

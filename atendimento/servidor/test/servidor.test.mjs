@@ -331,24 +331,27 @@ test('Instagram com login unificado (IG_ID): envia por graph.facebook.com/{IG_ID
   try {
     const r = await (await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) })).json();
     assert.strictEqual(r.ok, true);
-    assert.strictEqual(chamadas[0], 'https://graph.facebook.com/v27.0/17841400000000000/messages');
+    // sem Página encontrada, cai no envio direto pela conta do Instagram
+    assert.ok(chamadas.includes('https://graph.facebook.com/v27.0/17841400000000000/messages'), chamadas.join('\n'));
   } finally { globalThis.fetch = original; }
 });
 
-test('Instagram com token do Facebook (EAA) e sem IG_ID: descobre a conta pelas Páginas', async () => {
+test('Instagram com token do Facebook (EAA): descobre a Página e responde pela Página com o token dela', async () => {
   const env = { ...ambiente(), IG_TOKEN: 'EAAxyz' };
   await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
   const chamadas = [];
   const original = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    chamadas.push(String(url));
-    if (String(url).includes('/me/accounts')) return Response.json({ data: [{ id: 'PAGINA', instagram_business_account: { id: '1784199', username: 'urbanorioverde' } }] });
+  globalThis.fetch = async (url, op = {}) => {
+    chamadas.push({ url: String(url), auth: op.headers && op.headers.Authorization });
+    if (String(url).includes('/me/accounts')) return Response.json({ data: [{ id: 'PAGINA', access_token: 'TOKEN_DA_PAGINA', instagram_business_account: { id: '1784199', username: 'urbanorioverde' } }] });
     return Response.json({ recipient_id: '900', message_id: 'ig.mid.Y' });
   };
   try {
     const r = await (await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) })).json();
     assert.strictEqual(r.ok, true);
-    assert.ok(chamadas.some((u) => u === 'https://graph.facebook.com/v27.0/1784199/messages'), chamadas.join('\n'));
+    const envio = chamadas.find((c) => c.url.endsWith('/messages'));
+    assert.strictEqual(envio.url, 'https://graph.facebook.com/v27.0/PAGINA/messages');
+    assert.strictEqual(envio.auth, 'Bearer TOKEN_DA_PAGINA');
   } finally { globalThis.fetch = original; }
 });
 
@@ -371,4 +374,23 @@ test('Instagram: token IG… ignora o IG_ID e usa graph.instagram.com/me', async
     await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) });
     assert.strictEqual(chamadas[0], 'https://graph.instagram.com/v27.0/me/messages');
   } finally { globalThis.fetch = original; }
+});
+
+test('Instagram: perfil (nome e @) é buscado com o token da Página', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'EAAperfil' };
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, op = {}) => {
+    chamadas.push({ url: String(url), auth: op.headers && op.headers.Authorization });
+    if (String(url).includes('/me/accounts')) return Response.json({ data: [{ id: 'PAG', access_token: 'TOK_PAG', instagram_business_account: { id: '1784' } }] });
+    if (String(url).includes('fields=name,username')) return Response.json({ name: 'Rayan', username: '_rayanluiz.kk' });
+    return Response.json({ data: [] });
+  };
+  try {
+    await webhook(env, dmInstagram([dm('555', 'ig.mid.P', { text: 'Oi' })]));
+  } finally { globalThis.fetch = original; }
+  const c = (await (await api(env, '/api/conversas')).json()).conversas.find((x) => x.wa_id === 'ig_555');
+  assert.strictEqual(c.nome, 'Rayan');
+  assert.strictEqual(c.usuario, '_rayanluiz.kk');
+  assert.strictEqual(chamadas.find((x) => x.url.includes('fields=name,username')).auth, 'Bearer TOK_PAG');
 });
