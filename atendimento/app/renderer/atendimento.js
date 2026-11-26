@@ -86,6 +86,17 @@ const agoraServidor = () => Date.now() + S.difRelogio;
 async function telaConfig() {
   const raiz = limpar($('#raiz'));
   const c = S.cfg || {};
+  if (c.porConta) { // app unificado: quem entra é a conta da pessoa (login do app); aqui só a conferência da Meta
+    raiz.append(h('div', { class: 'config' },
+      h('h1', {}, 'Ligação com o WhatsApp'),
+      c.configurado
+        ? h('p', { class: 'apoio' }, `Você está no Atendimento como ${c.operador}. As suas respostas aparecem com esse nome para a equipe (o cliente não vê).`)
+        : h('p', { class: 'apoio' }, 'Entre com o seu usuário e senha para usar o Atendimento.'),
+      h('div', { class: 'acoes' },
+        c.configurado ? h('button', { type: 'button', class: 'btn', onclick: () => iniciar() }, 'Voltar') : null,
+        c.admin ? h('button', { type: 'button', class: 'btn', id: 'btn-diagnostico', onclick: diagnosticar }, 'Conferir ligação com o WhatsApp') : null)));
+    return;
+  }
   const url = h('input', { type: 'url', value: c.url || '', placeholder: 'https://atendimento-urbano-norte.SEU-USUARIO.workers.dev', spellcheck: 'false', autocomplete: 'off', id: 'cfg-url' });
   const chave = h('input', { type: 'password', value: '', placeholder: c.temChave ? 'Chave salva. Cole outra só para trocar.' : '', autocomplete: 'off', id: 'cfg-chave' });
   const operador = h('input', { type: 'text', value: c.operador || '', autocomplete: 'off', id: 'cfg-operador', placeholder: 'Ex.: Rayan' });
@@ -161,7 +172,8 @@ function telaPainel() {
         h('div', { class: 'lado-titulo' }, h('h1', {}, 'Atendimento'),
           h('span', {},
             h('button', { type: 'button', class: 'btn discreto', id: 'btn-atualizar', title: 'Buscar mensagens novas agora (F5)', onclick: atualizarAgora }, '↻ Atualizar'),
-            h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar'))),
+            !S.cfg.porConta ? h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar')
+              : S.cfg.admin ? h('button', { type: 'button', class: 'btn discreto', title: 'Conferir a ligação com o WhatsApp (só o administrador)', onclick: telaConfig }, 'WhatsApp') : null)),
         h('div', { class: 'filtros', role: 'group', 'aria-label': 'Mostrar' }, filtros),
         h('div', { class: 'filtros canais', role: 'group', 'aria-label': 'Canal' }, canais),
         busca),
@@ -400,3 +412,4 @@ window.api.aoAtualizar(() => { if ($('#lista')) carregarLista(); });
 window.api.aoAbrir((waId) => { if ($('#lista')) abrir(waId); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && $('#lista')) { carregarLista(); carregarMensagens(false); } });
 iniciar();
+window.api.aoConta(() => { S.atual = null; iniciar(); }); // entrou ou saiu outra pessoa

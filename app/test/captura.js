@@ -18,6 +18,7 @@ const { spawn } = require('child_process');
 const PORTA_AT = 8797;
 const servidorAt = spawn('node', [path.join(__dirname, '..', '..', 'atendimento', 'servidor', 'dev.mjs'), '--porta', String(PORTA_AT), '--meta-falsa', '--chave', 'teste'], { stdio: 'ignore' });
 process.on('exit', () => servidorAt.kill());
+process.env.URBANO_SERVIDOR = `http://127.0.0.1:${PORTA_AT}`; // login e Atendimento usam o servidor local
 const simular = (dados) => fetch(`http://127.0.0.1:${PORTA_AT}/dev/simular`, { method: 'POST', body: JSON.stringify(dados) }).then((r) => r.json());
 
 const principal = require('../main.js');
@@ -32,13 +33,35 @@ async function capturar(nome) {
   // compõe a barra + a tela visível numa imagem só
   const visivel = [principal.aba(), telas[principal.aba()]];
   fs.writeFileSync(path.join(saida, `${nome}-barra.png`), img.toPNG());
+  if (principal.painel()) return; // login/equipe: o painel é a própria janela, as abas estão escondidas
   fs.writeFileSync(path.join(saida, `${nome}-tela.png`), (await visivel[1].webContents.capturePage()).toPNG());
+}
+
+const shellJs = (js) => principal.janela().webContents.executeJavaScript(js);
+const visivelNoShell = (sel) => shellJs(`!document.querySelector(${JSON.stringify(sel)}).classList.contains('oculto')`);
+async function preencherEnviar(form, campos) {
+  return shellJs(`(() => { ${Object.entries(campos).map(([id, v]) => `document.getElementById(${JSON.stringify(id)}).value = ${JSON.stringify(v)};`).join(' ')}
+    document.getElementById(${JSON.stringify(form)}).requestSubmit(); return true; })()`);
 }
 
 app.whenReady().then(async () => {
   try {
     await espera(3000);
     const t = principal.telas();
+
+    // ---------- login ----------
+    conferir('login: sem conta, abre no primeiro acesso e esconde as abas', await visivelNoShell('#form-admin') && !(await visivelNoShell('#form-entrar'))
+      && principal.painel() !== null);
+    await capturar('0-login-primeiro-acesso');
+    await preencherEnviar('form-admin', { 'admin-chave': 'errada', 'admin-nome': 'Rayan Luiz', 'admin-usuario': 'rayan', 'admin-senha': 'senha-do-rayan', 'admin-senha2': 'senha-do-rayan' });
+    await espera(800);
+    const erroChave = await shellJs("document.getElementById('admin-erro').textContent");
+    conferir('login: chave de instalação errada é recusada', /inválida/.test(erroChave), erroChave);
+    await preencherEnviar('form-admin', { 'admin-chave': 'teste', 'admin-nome': 'Rayan Luiz', 'admin-usuario': 'rayan', 'admin-senha': 'senha-do-rayan', 'admin-senha2': 'senha-do-rayan' });
+    await espera(1500);
+    conferir('login: criou o administrador e mostrou as abas', !(await visivelNoShell('#painel-login')) && principal.painel() === null
+      && (await shellJs("document.getElementById('conta-nome').textContent")) === 'Rayan');
+
     const apiSorteio = await t.sorteio.webContents.executeJavaScript('Object.keys(window.api).sort().join(",")');
     const apiDisparo = await t.disparo.webContents.executeJavaScript('Object.keys(window.api).sort().join(",")');
     conferir('sorteio tem o seu window.api', apiSorteio.includes('janelaVertical') && !apiSorteio.includes('envio'), apiSorteio.slice(0, 60) + '...');
@@ -72,16 +95,13 @@ app.whenReady().then(async () => {
     await simular({ canal: 'instagram', de: '9001', nome: 'Bia Souza', usuario: 'bia.souza', texto: 'Oi! Vocês fazem corrida pra Montividiu?', minutosAtras: 1 });
     await simular({ de: '556299990000', nome: 'João Victor', tipo: 'audio', minutosAtras: 2 });
     const ta = t.atendimento.webContents;
-    const cfgOk = await ta.executeJavaScript(`window.api.config.salvar({ url: 'http://127.0.0.1:${PORTA_AT}', chave: 'teste', operador: 'Rayan' })`);
-    conferir('atendimento: conecta ao servidor', cfgOk.ok === true, JSON.stringify(cfgOk));
-    const cfgErrado = await ta.executeJavaScript(`window.api.config.salvar({ url: 'http://127.0.0.1:${PORTA_AT}', chave: 'errada', operador: 'Rayan' })`);
-    conferir('atendimento: chave errada é recusada', cfgErrado.ok === false && /chave/i.test(cfgErrado.erro), cfgErrado.erro);
-    const urlHttp = await ta.executeJavaScript(`window.api.config.salvar({ url: 'http://exemplo.com', chave: 'x', operador: 'Rayan' })`);
-    conferir('atendimento: exige https', urlHttp.ok === false && /https/.test(urlHttp.erro));
+    const cfgConta = await ta.executeJavaScript('window.api.config.ler()');
+    conferir('atendimento: usa a conta logada', cfgConta.ok && cfgConta.dados.porConta && cfgConta.dados.configurado && cfgConta.dados.operador === 'Rayan Luiz', JSON.stringify(cfgConta));
     await ta.executeJavaScript('iniciar()');
     principal.mostrarAba('atendimento');
-    await espera(2500);
-    const contador = await principal.janela().webContents.executeJavaScript("document.getElementById('contador-atendimento').textContent");
+    // o contador da aba vem da vigia, que confere o servidor a cada 20 s
+    let contador = '';
+    for (let i = 0; i < 25 && contador !== '6'; i++) { await espera(1000); contador = await shellJs("document.getElementById('contador-atendimento').textContent"); }
     conferir('atendimento: contador de não lidas na aba', contador === '6', `contador=${contador}`);
     const nomes = await ta.executeJavaScript("[...document.querySelectorAll('.item-nome')].map(e => e.textContent)");
     conferir('atendimento: lista WhatsApp e Instagram juntos, mais recente primeiro', JSON.stringify(nomes) === JSON.stringify(['Bia Souza', 'João Victor', 'Ana Paula', 'Carla']), JSON.stringify(nomes));
@@ -154,6 +174,40 @@ app.whenReady().then(async () => {
     const depois = principal.janela().getContentSize();
     const b2 = t.sorteio.getBounds();
     conferir('saiu do vertical: tamanho e barra voltaram', depois[0] === antes[0] && depois[1] === antes[1] && b2.y === 48, `${antes} -> ${depois}, y=${b2.y}`);
+
+    // ---------- equipe ----------
+    await shellJs("window.shell.conta.painel('equipe')");
+    await espera(800);
+    conferir('equipe: o painel cobre as abas', await visivelNoShell('#painel-equipe') && principal.painel() !== null);
+    await preencherEnviar('form-novo', { 'novo-nome': 'Maria Silva', 'novo-usuario': 'maria.silva', 'novo-senha': 'senha-da-maria' });
+    await espera(1000);
+    const linhas = await shellJs("[...document.querySelectorAll('#equipe-lista tr')].map((tr) => tr.cells[0].textContent + '|' + tr.cells[2].textContent).join(';')");
+    conferir('equipe: adicionou a atendente', /Maria Silva\|Atendente/.test(linhas) && /Rayan Luiz/.test(linhas), linhas);
+    const aviso = await shellJs("document.getElementById('equipe-aviso').textContent");
+    conferir('equipe: mostra usuário e senha para passar à pessoa', /maria\.silva/.test(aviso) && /senha-da-maria/.test(aviso), aviso.slice(0, 90));
+    await capturar('7-equipe');
+    await shellJs("document.querySelector('#painel-equipe .btn-voltar').click()");
+    await espera(500);
+    conferir('equipe: voltar mostra as abas de novo', !(await visivelNoShell('#painel-equipe')) && principal.painel() === null);
+
+    // ---------- sair e entrar como outra pessoa ----------
+    await shellJs('window.shell.conta.sair()');
+    await espera(1200);
+    conferir('sair: volta para a tela de entrar', await visivelNoShell('#form-entrar') && principal.painel() !== null);
+    await preencherEnviar('form-entrar', { 'entrar-usuario': 'maria.silva', 'entrar-senha': 'errada' });
+    await espera(1000);
+    const erroSenha = await shellJs("document.getElementById('entrar-erro').textContent");
+    conferir('entrar: senha errada mostra o aviso', /incorretos/.test(erroSenha), erroSenha);
+    await capturar('8-login');
+    await preencherEnviar('form-entrar', { 'entrar-usuario': 'maria.silva', 'entrar-senha': 'senha-da-maria' });
+    await espera(2000);
+    const cfgMaria = await ta.executeJavaScript('window.api.config.ler()');
+    conferir('entrar: Maria entra e o Atendimento passa a usar o nome dela', !(await visivelNoShell('#painel-login')) && cfgMaria.dados.operador === 'Maria Silva' && cfgMaria.dados.admin === false,
+      JSON.stringify(cfgMaria.dados));
+    const ajM = await t.disparo.webContents.executeJavaScript('window.api.ajustes.ler()');
+    conferir('disparo: o nome vem da conta', ajM.dados.operador === 'Maria Silva' && ajM.dados.operadorPelaConta === true, JSON.stringify(ajM.dados).slice(0, 120));
+    const eq = await shellJs('window.shell.conta.equipe.listar()');
+    conferir('atendente não vê a equipe', eq.ok === false && /administrador/.test(eq.erro), eq.erro);
   } catch (e) {
     conferir('execução', false, e.stack);
   }

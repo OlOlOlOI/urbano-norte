@@ -1,7 +1,9 @@
 'use strict';
 // Atendimento Urbano Norte — parte do processo principal (aba Atendimento do app unificado).
 // Conversa com o servidor do Atendimento (atendimento/servidor, na Cloudflare): lista conversas, mensagens, responde.
-// O token do WhatsApp fica só no servidor; aqui fica apenas o endereço e a chave de acesso do escritório (cifrados).
+// O token do WhatsApp fica só no servidor. No app unificado, quem entra é a CONTA da pessoa (login, app/conta.js):
+// o app passa `pedir` e `sessao` em registrar() e o Atendimento usa essa sessão. Sem isso (modo antigo),
+// usa o endereço e a chave guardados aqui (cifrados).
 const { app, ipcMain, safeStorage, shell, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -11,6 +13,8 @@ let janela = () => null;
 let conteudo = () => null;
 let aoNaoLidas = () => {};
 let visivel = () => false;
+let pedirConta = null;      // (caminho, opções) => chamada autenticada pela conta logada (app unificado)
+let sessaoConta = () => null;
 
 // ---------- configuração (cifrada neste computador) ----------
 const arqConfig = () => path.join(pastaDados(), 'config.dat');
@@ -35,7 +39,11 @@ function validarUrl(bruto) {
 }
 
 // ---------- chamadas ao servidor ----------
-async function chamarServidor(caminho, { metodo = 'GET', corpo, cfg = lerConfig(), binario = false } = {}) {
+const configurado = () => (pedirConta ? Boolean(sessaoConta()) : (() => { const c = lerConfig(); return Boolean(c.url && c.chave); })());
+
+async function chamarServidor(caminho, { metodo = 'GET', corpo, cfg, binario = false } = {}) {
+  if (pedirConta && !cfg) return pedirConta(caminho, { metodo, corpo, binario });
+  cfg = cfg || lerConfig();
   if (!cfg.url || !cfg.chave) throw new Error('Configure o Atendimento primeiro.');
   let r;
   try {
@@ -65,10 +73,9 @@ let ultimaVista = new Map(); // waId -> ultima_msg_em já avisada
 let vigia = null;
 
 async function conferirNovidades() {
-  const cfg = lerConfig();
-  if (!cfg.url || !cfg.chave) { aoNaoLidas(0); return; }
+  if (!configurado()) { aoNaoLidas(0); return; }
   let r;
-  try { r = await chamarServidor('/api/conversas?estado=aberta', { cfg }); } catch { return; } // sem internet: tenta no próximo ciclo
+  try { r = await chamarServidor('/api/conversas?estado=aberta'); } catch { return; } // sem internet: tenta no próximo ciclo
   aoNaoLidas(r.naoLidas || 0);
   const primeiraVez = ultimoTotal === null;
   for (const c of r.conversas) {
@@ -110,6 +117,10 @@ function registrarIpc() {
   });
 
   h('atendimento:config:ler', () => {
+    if (pedirConta) {
+      const s = sessaoConta();
+      return { porConta: true, configurado: Boolean(s), operador: s ? s.usuario.nome : '', admin: Boolean(s && s.usuario.papel === 'admin'), protecao: protecao() };
+    }
     const c = lerConfig();
     return { url: c.url || '', temChave: Boolean(c.chave), operador: c.operador || '', configurado: Boolean(c.url && c.chave), protecao: protecao() };
   });
@@ -133,7 +144,7 @@ function registrarIpc() {
     return chamarServidor('/api/conversas' + (q.toString() ? '?' + q : ''));
   });
   h('atendimento:mensagens', ({ waId, desde }) => chamarServidor(`/api/conversas/${enc(waId)}/mensagens${desde ? `?desde=${Number(desde)}` : ''}`));
-  h('atendimento:enviar', ({ waId, texto }) => chamarServidor(`/api/conversas/${enc(waId)}/enviar`, { metodo: 'POST', corpo: { texto: String(texto || ''), operador: lerConfig().operador || '' } }));
+  h('atendimento:enviar', ({ waId, texto }) => chamarServidor(`/api/conversas/${enc(waId)}/enviar`, { metodo: 'POST', corpo: { texto: String(texto || ''), ...(pedirConta ? {} : { operador: lerConfig().operador || '' }) } }));
   h('atendimento:lida', async ({ waId }) => { await chamarServidor(`/api/conversas/${enc(waId)}/lida`, { metodo: 'POST' }); conferirNovidades(); return true; });
   h('atendimento:resolver', async ({ waId }) => { await chamarServidor(`/api/conversas/${enc(waId)}/resolver`, { metodo: 'POST' }); conferirNovidades(); return true; });
   h('atendimento:apelido', ({ waId, apelido }) => chamarServidor(`/api/conversas/${enc(waId)}/apelido`, { metodo: 'POST', corpo: { apelido: String(apelido || '') } }));
@@ -178,8 +189,12 @@ function registrar(op = {}) {
   if (op.conteudo) conteudo = op.conteudo;
   if (op.aoNaoLidas) aoNaoLidas = op.aoNaoLidas;
   if (op.visivel) visivel = op.visivel;
+  if (op.pedir) { pedirConta = op.pedir; sessaoConta = op.sessao || (() => null); }
   registrarIpc();
   iniciarVigia();
 }
 
-module.exports = { registrar, validarUrl, formatar };
+/** Recomeça a vigia (ex.: alguém entrou ou saiu da conta). */
+function reiniciar() { aoNaoLidas(0); iniciarVigia(); avisar('atendimento:conta', null); }
+
+module.exports = { registrar, reiniciar, validarUrl, formatar };

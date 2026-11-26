@@ -13,7 +13,13 @@ function ambiente() {
   return { DB: new D1Local(), APP_SECRET: SEGREDO, VERIFY_TOKEN: 'combinado', WHATSAPP_TOKEN: 'TOKEN', CHAVE_APP: CHAVE, PHONE_NUMBER_ID: '999' };
 }
 const chamar = (env, caminho, opcoes = {}) => servidor.fetch(new Request('https://atendimento.exemplo' + caminho, opcoes), env, null);
-const api = (env, caminho, opcoes = {}) => chamar(env, caminho, { ...opcoes, headers: { Authorization: `Bearer ${CHAVE}`, 'Content-Type': 'application/json', ...(opcoes.headers || {}) } });
+const jsonPost = (corpo, token) => ({ method: 'POST', body: JSON.stringify(corpo), headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+// Na primeira chamada de cada ambiente, cria o administrador (com a chave de instalação) e guarda a sessão.
+async function sessaoAdmin(env) {
+  if (!env.__token) env.__token = (await (await chamar(env, '/api/conta/primeiro-admin', jsonPost({ chave: CHAVE, nome: 'Rayan', usuario: 'rayan', senha: 'senha-do-rayan' }))).json()).token;
+  return env.__token;
+}
+const api = async (env, caminho, opcoes = {}) => chamar(env, caminho, { ...opcoes, headers: { Authorization: `Bearer ${await sessaoAdmin(env)}`, 'Content-Type': 'application/json', ...(opcoes.headers || {}) } });
 
 function webhook(env, corpo, assinatura) {
   const bruto = JSON.stringify(corpo);
@@ -427,4 +433,111 @@ test('apelido dado pela equipe: salva, busca, sobrevive a mensagem nova e pode s
   assert.strictEqual(r.apelido, null);
   const nada = await api(env, '/api/conversas/550000000000/apelido', { method: 'POST', body: JSON.stringify({ apelido: 'x' }) });
   assert.strictEqual(nada.status, 404);
+});
+
+// ---------- contas da equipe (login) ----------
+const comToken = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
+const entrar = async (env, usuario, senha) => chamar(env, '/api/conta/entrar', jsonPost({ usuario, senha, dispositivo: 'PC-TESTE' }));
+
+test('primeiro administrador: só com a chave de instalação e só uma vez', async () => {
+  const env = ambiente();
+  assert.deepStrictEqual(await (await chamar(env, '/api/conta/estado')).json(), { ok: true, temContas: false });
+  const errada = await chamar(env, '/api/conta/primeiro-admin', jsonPost({ chave: 'outra', nome: 'X', usuario: 'xxx', senha: '12345678' }));
+  assert.strictEqual(errada.status, 401);
+  const curta = await chamar(env, '/api/conta/primeiro-admin', jsonPost({ chave: CHAVE, nome: 'Rayan', usuario: 'rayan', senha: '123' }));
+  assert.strictEqual(curta.status, 400);
+  const ok = await (await chamar(env, '/api/conta/primeiro-admin', jsonPost({ chave: CHAVE, nome: 'Rayan', usuario: 'Rayan', senha: 'senha-do-rayan' }))).json();
+  assert.strictEqual(ok.usuario.usuario, 'rayan');
+  assert.strictEqual(ok.usuario.papel, 'admin');
+  assert.match(ok.token, /^[a-f0-9]{64}$/);
+  const de_novo = await chamar(env, '/api/conta/primeiro-admin', jsonPost({ chave: CHAVE, nome: 'Outro', usuario: 'outro', senha: 'senha-do-outro' }));
+  assert.strictEqual(de_novo.status, 409);
+  assert.strictEqual((await (await chamar(env, '/api/conta/estado')).json()).temContas, true);
+  // a chave de instalação não abre mais o Atendimento
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(CHAVE))).status, 401);
+  // senha guardada só como hash, e o token também
+  const linha = env.DB.db.prepare('SELECT senha_hash FROM usuarios').get();
+  assert.ok(linha.senha_hash.startsWith('pbkdf2$') && !linha.senha_hash.includes('senha-do-rayan'));
+  assert.strictEqual(env.DB.db.prepare('SELECT COUNT(*) AS n FROM sessoes WHERE token_hash = ?').get(ok.token).n, 0);
+});
+
+test('entrar: senha errada não diz se o usuário existe; 5 erros bloqueiam; o admin trocando a senha desbloqueia', async () => {
+  const env = ambiente();
+  await sessaoAdmin(env);
+  const r1 = await entrar(env, 'rayan', 'errada');
+  const r2 = await entrar(env, 'ninguem', 'errada');
+  assert.strictEqual(r1.status, 401);
+  assert.strictEqual((await r1.json()).erro, (await r2.json()).erro);
+  const criado = await (await api(env, '/api/equipe', { method: 'POST', body: JSON.stringify({ nome: 'Maria Silva', usuario: 'maria', senha: 'senha-da-maria' }) })).json();
+  for (let i = 0; i < 5; i++) await entrar(env, 'maria', 'errada');
+  const bloqueada = await entrar(env, 'maria', 'senha-da-maria');
+  assert.strictEqual(bloqueada.status, 429);
+  assert.match((await bloqueada.json()).erro, /Muitas tentativas/);
+  await api(env, `/api/equipe/${criado.usuario.id}`, { method: 'POST', body: JSON.stringify({ senha: 'nova-senha-maria' }) });
+  const ok = await (await entrar(env, 'MARIA ', 'nova-senha-maria')).json();
+  assert.strictEqual(ok.ok, true);
+  assert.strictEqual(ok.usuario.nome, 'Maria Silva');
+});
+
+test('atendente: usa o Atendimento, não mexe na equipe; a resposta sai com o nome da conta', async () => {
+  const env = ambiente();
+  await api(env, '/api/equipe', { method: 'POST', body: JSON.stringify({ nome: 'Maria Silva', usuario: 'maria', senha: 'senha-da-maria', papel: 'atendente' }) });
+  const { token } = await (await entrar(env, 'maria', 'senha-da-maria')).json();
+  assert.strictEqual((await chamar(env, '/api/equipe', comToken(token))).status, 403);
+  assert.strictEqual((await chamar(env, '/api/diagnostico', { method: 'POST', ...comToken(token) })).status, 403);
+  await webhook(env, mensagemCliente('wamid.L1', 'oi'));
+  const meta = metaFalsa();
+  try {
+    const r = await chamar(env, '/api/conversas/556492937604/enviar', { ...jsonPost({ texto: 'Olá!', operador: 'Outra pessoa' }, token) });
+    assert.strictEqual(r.status, 200);
+  } finally { meta.restaurar(); }
+  const msgs = await (await api(env, '/api/conversas/556492937604/mensagens')).json();
+  assert.strictEqual(msgs.mensagens.find((m) => m.direcao === 'saida').operador, 'Maria Silva');
+  const eu = await (await chamar(env, '/api/conta/eu', comToken(token))).json();
+  assert.strictEqual(eu.usuario.papel, 'atendente');
+});
+
+test('desativar alguém derruba o acesso na hora; sair encerra só aquela sessão', async () => {
+  const env = ambiente();
+  const { usuario } = await (await api(env, '/api/equipe', { method: 'POST', body: JSON.stringify({ nome: 'João', usuario: 'joao', senha: 'senha-do-joao' }) })).json();
+  const a = (await (await entrar(env, 'joao', 'senha-do-joao')).json()).token;
+  const b = (await (await entrar(env, 'joao', 'senha-do-joao')).json()).token;
+  await chamar(env, '/api/conta/sair', { method: 'POST', ...comToken(a) });
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(a))).status, 401);
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(b))).status, 200);
+  await api(env, `/api/equipe/${usuario.id}`, { method: 'POST', body: JSON.stringify({ ativo: false }) });
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(b))).status, 401);
+  assert.strictEqual((await entrar(env, 'joao', 'senha-do-joao')).status, 403);
+  const lista = await (await api(env, '/api/equipe')).json();
+  assert.deepStrictEqual(lista.equipe.map((u) => [u.usuario, u.ativo]), [['rayan', true], ['joao', false]]);
+  assert.ok(!('senha_hash' in lista.equipe[0]));
+});
+
+test('admin não tira o próprio acesso; usuário repetido é recusado', async () => {
+  const env = ambiente();
+  const eu = (await (await api(env, '/api/conta/eu')).json()).usuario;
+  assert.strictEqual((await api(env, `/api/equipe/${eu.id}`, { method: 'POST', body: JSON.stringify({ papel: 'atendente' }) })).status, 400);
+  assert.strictEqual((await api(env, `/api/equipe/${eu.id}`, { method: 'POST', body: JSON.stringify({ ativo: false }) })).status, 400);
+  assert.strictEqual((await api(env, '/api/equipe', { method: 'POST', body: JSON.stringify({ nome: 'R', usuario: 'rayan', senha: 'qualquer-coisa' }) })).status, 409);
+  assert.strictEqual((await api(env, '/api/equipe', { method: 'POST', body: JSON.stringify({ nome: 'R', usuario: 'com espaço', senha: 'qualquer-coisa' }) })).status, 400);
+});
+
+test('trocar a própria senha: confere a atual e tira as outras sessões', async () => {
+  const env = ambiente();
+  const aqui = await sessaoAdmin(env);
+  const outro = (await (await entrar(env, 'rayan', 'senha-do-rayan')).json()).token;
+  assert.strictEqual((await chamar(env, '/api/conta/senha', jsonPost({ atual: 'errada', nova: 'nova-senha-123' }, aqui))).status, 400);
+  assert.strictEqual((await chamar(env, '/api/conta/senha', jsonPost({ atual: 'senha-do-rayan', nova: 'nova-senha-123' }, aqui))).status, 200);
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(aqui))).status, 200);
+  assert.strictEqual((await chamar(env, '/api/conversas', comToken(outro))).status, 401);
+  assert.strictEqual((await entrar(env, 'rayan', 'nova-senha-123')).status, 200);
+});
+
+test('sessão vencida (30 dias sem uso) pede login de novo', async () => {
+  const env = ambiente();
+  const token = await sessaoAdmin(env);
+  env.DB.db.prepare('UPDATE sessoes SET expira_em = ?').run(Date.now() - 1);
+  const r = await chamar(env, '/api/conversas', comToken(token));
+  assert.strictEqual(r.status, 401);
+  assert.match((await r.json()).erro, /Entre de novo/);
 });

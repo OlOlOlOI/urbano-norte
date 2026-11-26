@@ -49,13 +49,16 @@ Pré-requisitos: número brasileiro da empresa já na Meta (Etapa 2) e uma conta
    npx wrangler secret put APP_SECRET      # Meta: app > Configurações do app > Básico > Chave secreta do app
    npx wrangler secret put VERIFY_TOKEN    # uma palavra qualquer, combinada com a Meta no passo 5
    npx wrangler secret put WHATSAPP_TOKEN  # token PERMANENTE de usuário do sistema (Business Suite > Usuários do sistema)
-   npx wrangler secret put CHAVE_APP       # senha longa para os computadores do escritório (ex.: gerada por gerenciador de senhas)
+   bash nova-chave-instalacao.sh           # CHAVE_APP: chave de instalação, só para criar o 1º administrador (mostra na tela)
    ```
 4. `npx wrangler deploy` → mostra o endereço, ex.: `https://atendimento-urbano-norte.SEU-USUARIO.workers.dev`.
 5. **Meta:** app > WhatsApp > Configuração > Webhook: URL de retorno = endereço + `/webhook`, token de verificação = o VERIFY_TOKEN. Depois, em "Campos do webhook", assine **messages**.
-6. **Em cada computador:** aba Atendimento → endereço do passo 4 + CHAVE_APP + nome da pessoa.
+6. **Primeiro acesso no app:** a tela de login pede a chave de instalação e cria a conta do administrador.
+   Depois, o administrador cria uma conta para cada pessoa (menu com o nome → Equipe). Em cada computador, a pessoa só entra com usuário e senha.
 
 ## Segurança
 - Toda mensagem da Meta é conferida pela assinatura (APP_SECRET); sem ela, é recusada.
-- O app só entra com a CHAVE_APP; o token do WhatsApp fica só no servidor.
+- Cada pessoa tem conta própria (usuário e senha, `src/contas.js`): senhas só como hash PBKDF2, sessão de 30 dias por computador,
+  5 senhas erradas bloqueiam por 15 min, desativar alguém derruba o acesso na hora. Papéis: administrador (equipe e ligação com o WhatsApp) e atendente.
+  A resposta enviada leva o nome da conta. A CHAVE_APP só cria o primeiro administrador; o token do WhatsApp fica só no servidor.
 - Nos computadores, endereço e chave ficam cifrados pelo sistema (Keychain no Mac, DPAPI no Windows).

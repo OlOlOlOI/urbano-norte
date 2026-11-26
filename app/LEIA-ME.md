@@ -17,6 +17,16 @@ Atalhos: **Ctrl+1** / **Ctrl+2** / **Ctrl+3** (Cmd no Mac) trocam de aba. No mod
   Uma correção no sorteio ou no disparo vale para o app próprio e para o unificado.
 - Dados ficam em `<dados do app>/Urbano Norte/sorteio/` e `/disparo/`.
 
+## Login e equipe
+
+O app abre na tela de login (`shell/`, `conta.js`). As contas ficam no servidor do Atendimento (`../atendimento/servidor/src/contas.js`);
+no computador fica só a sessão, cifrada (`conta.dat`), válida por 30 dias sem uso.
+- Primeiro acesso (nenhuma conta no servidor): cria o administrador com a chave de instalação (`atendimento/servidor/nova-chave-instalacao.sh`).
+- Menu com o nome (canto direito da barra): **Equipe** (só administrador: criar, desativar, nova senha, papel), **Trocar minha senha**, **Sair**.
+- O nome da conta vai para o histórico do Disparo e para as respostas do Atendimento.
+- O Sorteio e o Disparo funcionam no próprio computador: o login protege a entrada no app, não os arquivos do computador.
+- Desenvolvimento: `URBANO_SERVIDOR=http://127.0.0.1:8787 npm start` com `node ../atendimento/servidor/dev.mjs --meta-falsa --chave dev`.
+
 ## Dados dos apps antigos
 
 Na primeira vez que abre, o app copia (sem apagar nada) dos apps antigos:
@@ -52,4 +62,4 @@ Não apague a release `app-latest`. Se a tag não bater com a versão do `packag
 
 Primeira instalação num computador novo: baixe `Urbano-Norte-Instalador-<versão>.exe` da release mais recente `app-v*`
 (no Windows, "O Windows protegeu o computador" → **Mais informações → Executar assim mesmo**, porque o app não tem certificado pago).
-Depois, configure em cada computador: Atendimento (endereço do servidor + CHAVE_APP + nome) e Disparo (pasta compartilhada + nome).
+Depois, a pessoa entra com o usuário e a senha que o administrador criou e escolhe a pasta compartilhada do Disparo.

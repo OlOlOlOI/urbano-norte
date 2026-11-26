@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { migrar } = require('./migracao');
 const { iniciarAtualizacao } = require('./atualizacao');
+const conta = require('./conta');
 
 // Para testes: guardar os dados em outra pasta, sem mexer nos dados reais deste computador.
 if (process.env.URBANO_PASTA_DADOS) app.setPath('userData', process.env.URBANO_PASTA_DADOS);
@@ -26,6 +27,7 @@ let janela = null;
 const telas = {};
 let abaAtual = 'sorteio';
 let vertical = false;
+let painel = null; // tela da própria barra que cobre as abas: 'login' | 'equipe' | 'senha' (null = abas)
 let naoLidas = 0; // mensagens do Atendimento ainda não lidas (contador na aba) // modo vertical do sorteio (Reels/Stories): a tela ocupa a janela toda, sem barra
 
 const pastaModulo = (nome) => path.join(app.getPath('userData'), nome);
@@ -39,12 +41,12 @@ function posicionar() {
   const topo = vertical ? 0 : BARRA;
   for (const [nome, tela] of Object.entries(telas)) {
     tela.setBounds({ x: 0, y: topo, width: largura, height: Math.max(0, altura - topo) });
-    tela.setVisible(nome === abaAtual);
+    tela.setVisible(!painel && nome === abaAtual);
   }
 }
 
 function mostrarAba(nome) {
-  if (!ABAS[nome] || vertical) return;
+  if (!ABAS[nome] || vertical || painel) return;
   abaAtual = nome;
   posicionar();
   telas[nome].webContents.focus();
@@ -96,7 +98,7 @@ function criarJanela() {
   if (ABAS[salva]) abaAtual = salva;
   posicionar();
   janela.on('resize', posicionar);
-  janela.webContents.on('did-finish-load', () => { janela.webContents.send('shell:aba', abaAtual); janela.webContents.send('shell:contador', { atendimento: naoLidas }); });
+  janela.webContents.on('did-finish-load', () => { janela.webContents.send('shell:aba', abaAtual); janela.webContents.send('shell:contador', { atendimento: naoLidas }); janela.webContents.send('shell:painel', painel); });
   janela.on('closed', () => { janela = null; for (const k of Object.keys(telas)) delete telas[k]; });
 }
 
@@ -104,7 +106,49 @@ const janelaViva = () => (janela && !janela.isDestroyed() ? janela : null);
 
 ipcMain.handle('shell:trocar', (_e, nome) => { mostrarAba(String(nome)); return abaAtual; });
 const VERSAO = require('./package.json').version;
-ipcMain.handle('shell:info', () => ({ aba: abaAtual, versao: VERSAO }));
+ipcMain.handle('shell:info', () => ({ aba: abaAtual, versao: VERSAO, conta: conta.estado(), painel }));
+
+// ---------- login e equipe (app/conta.js) ----------
+function abrirPainel(nome) {
+  painel = nome;
+  posicionar();
+  if (janelaViva()) { janela.webContents.send('shell:painel', painel); if (!painel && telas[abaAtual]) telas[abaAtual].webContents.focus(); }
+}
+const hConta = (canal, fn) => ipcMain.handle(canal, async (_e, ...args) => {
+  try { return { ok: true, dados: await fn(...args) }; } catch (e) { return { ok: false, erro: String((e && e.message) || e) }; }
+});
+hConta('conta:estado', () => conta.estado());
+hConta('conta:situacao', () => conta.situacaoServidor());
+hConta('conta:entrar', (d) => conta.entrar(d || {}));
+hConta('conta:primeiroAdmin', (d) => conta.primeiroAdmin(d || {}));
+hConta('conta:sair', () => conta.sair());
+hConta('conta:senha', (d) => conta.trocarSenha(d || {}));
+hConta('conta:equipe:listar', () => conta.equipe.listar());
+hConta('conta:equipe:criar', (d) => conta.equipe.criar(d || {}));
+hConta('conta:equipe:alterar', ({ id, ...d } = {}) => conta.equipe.alterar(id, d));
+hConta('conta:painel', (nome) => { if (conta.estado().logado) abrirPainel(['equipe', 'senha'].includes(nome) ? nome : null); return painel; });
+hConta('conta:menu', () => {
+  const e = conta.estado();
+  if (!e.logado || !janelaViva()) return null;
+  Menu.buildFromTemplate([
+    { label: `${e.usuario.nome} (${e.usuario.usuario})`, enabled: false },
+    { type: 'separator' },
+    ...(e.usuario.papel === 'admin' ? [{ label: 'Equipe…', click: () => abrirPainel('equipe') }] : []),
+    { label: 'Trocar minha senha…', click: () => abrirPainel('senha') },
+    { type: 'separator' },
+    { label: 'Sair', click: () => conta.sair() },
+  ]).popup({ window: janela });
+  return null;
+});
+
+// Entrou, saiu ou a sessão terminou: mostra o login ou as abas e avisa os sistemas (o nome de quem usa mudou).
+conta.aoMudar((e) => {
+  abrirPainel(e.logado ? null : 'login');
+  if (janelaViva()) janela.webContents.send('shell:conta', e);
+  disparo.reiniciar();
+  atendimento.reiniciar();
+  if (telas.disparo && !telas.disparo.webContents.isDestroyed()) telas.disparo.webContents.reload();
+});
 
 sorteio.registrar({
   pastaDados: () => pastaModulo('sorteio'),
@@ -119,13 +163,18 @@ sorteio.registrar({
 app.whenReady().then(() => {
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null); // sem menu, sem atalho para ferramentas do desenvolvedor
   try { migrar(app.getPath('appData'), app.getPath('userData')); } catch (e) { console.error('[migracao]', e); }
+  if (!conta.carregar().logado) painel = 'login';
+  const nomeDaConta = () => { const s = conta.sessao(); return s ? s.usuario.nome : null; };
   disparo.registrar({
+    operador: nomeDaConta,
     pastaDados: () => pastaModulo('disparo'),
     janela: janelaViva,
     conteudo: () => (telas.disparo && !telas.disparo.webContents.isDestroyed() ? telas.disparo.webContents : null),
   });
   atendimento.registrar({
     pastaDados: () => pastaModulo('atendimento'),
+    pedir: (caminho, op) => conta.pedir(caminho, op),
+    sessao: () => conta.sessao(),
     janela: janelaViva,
     conteudo: () => (telas.atendimento && !telas.atendimento.webContents.isDestroyed() ? telas.atendimento.webContents : null),
     visivel: () => Boolean(janelaViva() && janela.isFocused() && abaAtual === 'atendimento'),
@@ -136,10 +185,11 @@ app.whenReady().then(() => {
     },
   });
   criarJanela();
+  conta.conferir(); // confere com o servidor em segundo plano (senha trocada, conta desativada...)
   iniciarAtualizacao(janelaViva);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-module.exports = { mostrarAba, telas: () => telas, janela: () => janela, aba: () => abaAtual, vertical: () => vertical };
+module.exports = { mostrarAba, telas: () => telas, janela: () => janela, aba: () => abaAtual, vertical: () => vertical, painel: () => painel };

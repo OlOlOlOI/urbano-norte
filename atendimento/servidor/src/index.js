@@ -9,7 +9,8 @@
 //   APP_SECRET      chave secreta do app da Meta — confere a assinatura de cada webhook
 //   VERIFY_TOKEN    palavra combinada com a Meta na hora de cadastrar o webhook
 //   WHATSAPP_TOKEN  token de acesso permanente (usuário do sistema) para responder pela API
-//   CHAVE_APP       chave que o app do escritório usa para entrar aqui
+//   CHAVE_APP       chave de instalação: só serve para criar a PRIMEIRA conta (administrador). Depois, cada pessoa
+//                   entra com o próprio usuário e senha (src/contas.js)
 // Variável comum (wrangler.toml): PHONE_NUMBER_ID
 //
 // Instagram (opcional — só mensagens diretas):
@@ -18,6 +19,8 @@
 //   IG_ID           (wrangler.toml) ID da conta do Instagram da empresa — com ele, usa graph.facebook.com/{IG_ID}
 //                   sem ele, usa a API antiga graph.instagram.com/me (login do Instagram)
 //   IG_APP_SECRET   chave secreta do app do Instagram, se for diferente da APP_SECRET (confere a assinatura)
+
+import * as contas from './contas.js';
 
 const GRAPH = 'https://graph.facebook.com/v27.0';
 const GRAPH_IG = 'https://graph.instagram.com/v27.0';
@@ -362,9 +365,43 @@ async function rotaWebhook(request, env, ctx) {
   return new Response('ok', { status: 200 });
 }
 
+const lerCorpo = async (request) => { try { const c = await request.json(); return c && typeof c === 'object' ? c : {}; } catch { return {}; } };
+const resposta = (r, montar = (d) => d) => (r.status === 200 ? json({ ok: true, ...montar(r.dados) }) : erro(r.status, r.erro));
+
+/** Login e equipe: /api/conta/... e /api/equipe/... (src/contas.js). Devolve null se o caminho não é daqui. */
+async function rotaContas(request, env, caminho, conta) {
+  const db = env.DB;
+  const m = request.method;
+  if (m === 'GET' && caminho === '/api/conta/eu') return json({ ok: true, usuario: conta });
+  if (m === 'POST' && caminho === '/api/conta/sair') { await contas.sair(db, conta); return json({ ok: true }); }
+  if (m === 'POST' && caminho === '/api/conta/senha') return resposta(await contas.trocarMinhaSenha(db, conta, await lerCorpo(request)), () => ({}));
+  if (!caminho.startsWith('/api/equipe')) return null;
+  if (conta.papel !== 'admin') return erro(403, 'Só o administrador mexe na equipe.');
+  if (m === 'GET' && caminho === '/api/equipe') return json({ ok: true, equipe: await contas.listarEquipe(db) });
+  if (m === 'POST' && caminho === '/api/equipe') return resposta(await contas.criarConta(db, await lerCorpo(request)), (u) => ({ usuario: u }));
+  const id = /^\/api\/equipe\/(\d+)$/.exec(caminho);
+  if (m === 'POST' && id) return resposta(await contas.alterarConta(db, conta, id[1], await lerCorpo(request)), (u) => ({ usuario: u }));
+  return erro(404, 'Rota não encontrada.');
+}
+
 async function rotaApi(request, env, caminho) {
-  const auth = request.headers.get('Authorization') || '';
-  if (!env.CHAVE_APP || !igualSeguro(auth, `Bearer ${env.CHAVE_APP}`)) return erro(401, 'Chave de acesso inválida.');
+  const db = env.DB;
+  try {
+    // sem sessão: saber se já existe conta, criar o primeiro administrador, entrar
+    if (request.method === 'GET' && caminho === '/api/conta/estado') return json({ ok: true, ...(await contas.estado(db)) });
+    if (request.method === 'POST' && caminho === '/api/conta/primeiro-admin') return resposta(await contas.primeiroAdmin(db, env, await lerCorpo(request), igualSeguro));
+    if (request.method === 'POST' && caminho === '/api/conta/entrar') return resposta(await contas.entrar(db, await lerCorpo(request)));
+
+    const conta = await contas.contaDaSessao(db, request);
+    if (!conta) return erro(401, 'Sua sessão terminou. Entre de novo com o seu usuário e senha.');
+    return (await rotaContas(request, env, caminho, conta)) || (await rotaAtendimento(request, env, caminho, conta));
+  } catch (e) {
+    if (e instanceof contas.Erro400) return erro(400, e.message);
+    throw e;
+  }
+}
+
+async function rotaAtendimento(request, env, caminho, conta) {
   const db = env.DB;
   const url = new URL(request.url);
   const partes = caminho.split('/').filter(Boolean); // ['api', 'conversas', waId, acao]
@@ -376,6 +413,7 @@ async function rotaApi(request, env, caminho) {
   // Confere a ligação com a Meta e corrige o que dá: token válido? a conta do WhatsApp (WABA) assina este app?
   // Sem essa assinatura a Meta não manda as mensagens dos clientes, mesmo com o webhook cadastrado.
   if (request.method === 'POST' && caminho === '/api/diagnostico') {
+    if (conta.papel !== 'admin') return erro(403, 'Só o administrador confere a ligação com o WhatsApp.');
     const passos = [];
     const numero = await graph(env, `${env.PHONE_NUMBER_ID}?fields=display_phone_number,verified_name`);
     passos.push({ item: 'Token do WhatsApp e número', ok: numero.ok, detalhe: numero.ok ? `${numero.dados.display_phone_number} (${numero.dados.verified_name || 'sem nome'})` : numero.erro });
@@ -486,7 +524,7 @@ async function rotaApi(request, env, caminho) {
       const texto = String(corpo.texto || '').trim();
       if (!texto) return erro(400, 'Escreva a mensagem.');
       if (texto.length > 4096) return erro(400, 'A mensagem passou de 4096 caracteres.');
-      return enviarTexto(env, db, waId, texto, String(corpo.operador || '').slice(0, 60));
+      return enviarTexto(env, db, waId, texto, conta.nome); // quem respondeu vem da conta, não do app
     }
     if (request.method === 'POST' && acao === 'lida') {
       await db.prepare('UPDATE conversas SET nao_lidas = 0, atualizada_em = ? WHERE wa_id = ?').bind(agora(), waId).run();

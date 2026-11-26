@@ -1,7 +1,7 @@
 {
   "name": "urbano-norte",
   "productName": "Urbano Norte",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sistemas da Urbano Norte em um app só: sorteio e disparo de mensagens",
   "main": "main.js",
   "author": "Urbano Norte",

@@ -17,4 +17,5 @@ contextBridge.exposeInMainWorld('api', {
   diagnostico: chamar('atendimento:diagnostico'),
   aoAtualizar: ouvir('atendimento:atualizou'),
   aoAbrir: ouvir('atendimento:abrir'),
+  aoConta: ouvir('atendimento:conta'),
 });

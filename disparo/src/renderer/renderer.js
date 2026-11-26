@@ -314,7 +314,8 @@ async function telaPrimeirosPassos(raiz) {
   const nome = h('input', { type: 'text', value: S.rascunhoNome || a.operador || '', autocomplete: 'off' });
   nome.addEventListener('input', () => { S.rascunhoNome = nome.value; });
   const passo1 = h('div', {},
-    ...campo('Seu nome', nome, 'Aparece no histórico. Cada pessoa usa um nome diferente.'),
+    ...(a.operadorPelaConta ? [h('p', { class: 'apoio' }, `Você está como ${a.operador} (nome da sua conta). Ele aparece no histórico.`)]
+      : campo('Seu nome', nome, 'Aparece no histórico. Cada pessoa usa um nome diferente.')),
     h('p', { class: 'rotulo' }, 'Pasta compartilhada'),
     h('p', { class: 'ajuda' }, 'Guarda a planilha, as mensagens e o histórico. Todos os usuários escolhem a mesma pasta (do Google Drive, OneDrive etc.).'),
     h('div', { class: 'acoes' },
@@ -322,7 +323,7 @@ async function telaPrimeirosPassos(raiz) {
       a.pasta ? h('span', { class: 'pequeno' }, 'Pasta escolhida: ', a.pasta) : null),
     h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn principal', onclick: async () => {
       if (!a.pasta) return avisoErro('Escolha a pasta compartilhada primeiro.');
-      if (await chamar(window.api.ajustes.salvarOperador(nome.value))) { S.rascunhoNome = ''; await ir(S.rota); }
+      if (a.operadorPelaConta || await chamar(window.api.ajustes.salvarOperador(nome.value))) { S.rascunhoNome = ''; await ir(S.rota); }
     } }, 'Salvar e continuar')));
 
   // Passo 2: planilha
@@ -632,7 +633,8 @@ async function telaConfig(raiz) {
 
   // Você
   const nome = h('input', { type: 'text', value: a.operador, autocomplete: 'off' });
-  raiz.append(h('h2', {}, 'Você'),
+  if (a.operadorPelaConta) raiz.append(h('h2', {}, 'Você'), h('p', { class: 'apoio' }, `${a.operador} (nome da sua conta, aparece no histórico).`));
+  else raiz.append(h('h2', {}, 'Você'),
     ...campo('Seu nome', nome, 'Aparece no histórico. Cada pessoa usa um nome diferente.'),
     h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: async () => {
       if (!a.pasta) return avisoErro('Escolha a pasta compartilhada antes de salvar o nome.');

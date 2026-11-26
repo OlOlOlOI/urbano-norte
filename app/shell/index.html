@@ -15,7 +15,112 @@
       <button type="button" role="tab" id="aba-atendimento" data-aba="atendimento" aria-selected="false" title="Atendimento pelo WhatsApp (Ctrl+3)">Atendimento <span class="beta">beta</span><span id="contador-atendimento" class="contador oculto" aria-live="polite"></span></button>
     </nav>
     <span id="versao" class="versao"></span>
+    <button type="button" id="btn-conta" class="conta oculto" aria-haspopup="menu" title="Sua conta: equipe, senha, sair">
+      <span id="conta-inicial" class="avatar" aria-hidden="true"></span><span id="conta-nome"></span><span aria-hidden="true">▾</span>
+    </button>
   </header>
+
+  <!-- Login: cobre a janela toda até a pessoa entrar -->
+  <main id="painel-login" class="painel login oculto" aria-labelledby="login-titulo">
+    <div class="cartao">
+      <p class="marca-grande"><span class="ponto"></span>Urbano Norte</p>
+      <h1 id="login-titulo">Entrar</h1>
+      <p id="login-apoio" class="apoio">Use o usuário e a senha que o administrador criou para você.</p>
+      <div id="login-sem-conexao" class="caixa erro oculto" role="alert">
+        <span id="login-sem-conexao-texto"></span>
+        <button type="button" id="btn-tentar" class="btn">Tentar de novo</button>
+      </div>
+
+      <form id="form-entrar" class="oculto" autocomplete="on">
+        <label for="entrar-usuario">Usuário</label>
+        <input id="entrar-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        <label for="entrar-senha">Senha</label>
+        <input id="entrar-senha" name="password" type="password" autocomplete="current-password" required>
+        <p id="entrar-erro" class="erro-campo" role="alert"></p>
+        <button type="submit" class="btn principal largo">Entrar</button>
+        <p class="ajuda">Esqueceu a senha? Peça ao administrador para criar uma nova.</p>
+      </form>
+
+      <form id="form-admin" class="oculto" autocomplete="off">
+        <p class="caixa">Crie a conta do <strong>administrador</strong> (quem cria as contas da equipe). Use a chave de instalação do servidor (CHAVE_APP).</p>
+        <label for="admin-chave">Chave de instalação</label>
+        <input id="admin-chave" type="password" required>
+        <label for="admin-nome">Seu nome</label>
+        <input id="admin-nome" placeholder="Ex.: Rayan Luiz" required>
+        <label for="admin-usuario">Usuário <span class="ajuda">minúsculas, sem espaço (ex.: rayan)</span></label>
+        <input id="admin-usuario" autocapitalize="none" spellcheck="false" required>
+        <label for="admin-senha">Senha <span class="ajuda">pelo menos 8 caracteres</span></label>
+        <input id="admin-senha" type="password" autocomplete="new-password" required>
+        <label for="admin-senha2">Repita a senha</label>
+        <input id="admin-senha2" type="password" autocomplete="new-password" required>
+        <p id="admin-erro" class="erro-campo" role="alert"></p>
+        <button type="submit" class="btn principal largo">Criar administrador e entrar</button>
+      </form>
+      <p id="login-versao" class="pequeno"></p>
+    </div>
+  </main>
+
+  <!-- Equipe: só o administrador -->
+  <main id="painel-equipe" class="painel oculto" aria-labelledby="equipe-titulo">
+    <div class="conteudo">
+      <div class="topo">
+        <h1 id="equipe-titulo">Equipe</h1>
+        <button type="button" class="btn btn-voltar">← Voltar ao app</button>
+      </div>
+      <p class="apoio">Cada pessoa entra com o próprio usuário e senha. Quem for desativado sai na hora de todos os computadores.</p>
+      <div id="equipe-aviso" class="caixa ok oculto" role="status"></div>
+      <table class="tabela">
+        <thead><tr><th>Nome</th><th>Usuário</th><th>Papel</th><th>Situação</th><th>Último acesso</th><th><span class="so-leitor">Ações</span></th></tr></thead>
+        <tbody id="equipe-lista"><tr><td colspan="6">Carregando…</td></tr></tbody>
+      </table>
+
+      <h2>Adicionar pessoa</h2>
+      <form id="form-novo" class="grade" autocomplete="off">
+        <div><label for="novo-nome">Nome</label><input id="novo-nome" placeholder="Ex.: Maria Silva" required></div>
+        <div><label for="novo-usuario">Usuário</label><input id="novo-usuario" placeholder="Ex.: maria.silva" autocapitalize="none" spellcheck="false" required></div>
+        <div><label for="novo-senha">Senha provisória</label>
+          <div class="linha"><input id="novo-senha" required><button type="button" id="btn-gerar" class="btn">Gerar</button></div></div>
+        <div><label for="novo-papel">Papel</label>
+          <select id="novo-papel"><option value="atendente">Atendente</option><option value="admin">Administrador (cria contas)</option></select></div>
+        <p id="novo-erro" class="erro-campo" role="alert"></p>
+        <div class="acoes"><button type="submit" class="btn principal">Adicionar</button></div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Trocar a própria senha -->
+  <main id="painel-senha" class="painel oculto" aria-labelledby="senha-titulo">
+    <div class="conteudo estreito">
+      <div class="topo">
+        <h1 id="senha-titulo">Trocar minha senha</h1>
+        <button type="button" class="btn btn-voltar">← Voltar ao app</button>
+      </div>
+      <form id="form-senha" autocomplete="off">
+        <label for="senha-atual">Senha atual</label>
+        <input id="senha-atual" type="password" autocomplete="current-password" required>
+        <label for="senha-nova">Nova senha <span class="ajuda">pelo menos 8 caracteres</span></label>
+        <input id="senha-nova" type="password" autocomplete="new-password" required>
+        <label for="senha-nova2">Repita a nova senha</label>
+        <input id="senha-nova2" type="password" autocomplete="new-password" required>
+        <p id="senha-erro" class="erro-campo" role="alert"></p>
+        <p class="ajuda">Os outros computadores em que você entrou saem da conta.</p>
+        <button type="submit" class="btn principal">Trocar senha</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Caixa de diálogo do painel Equipe (nova senha de alguém) -->
+  <dialog id="dlg-senha" aria-labelledby="dlg-senha-titulo">
+    <form id="form-dlg-senha" method="dialog">
+      <h2 id="dlg-senha-titulo">Nova senha</h2>
+      <p id="dlg-senha-apoio" class="apoio"></p>
+      <label for="dlg-senha-valor">Senha provisória</label>
+      <div class="linha"><input id="dlg-senha-valor" required><button type="button" id="dlg-gerar" class="btn">Gerar</button></div>
+      <p id="dlg-senha-erro" class="erro-campo" role="alert"></p>
+      <div class="acoes"><button type="button" id="dlg-cancelar" class="btn">Cancelar</button><button type="submit" class="btn principal">Salvar senha</button></div>
+    </form>
+  </dialog>
+
   <script src="shell.js"></script>
 </body>
 </html>

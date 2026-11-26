@@ -89,9 +89,12 @@ let planilha = null;        // { headers, rows, origem, atualizadoEm, hash }
 let envioAtual = null;      // { sinal } enquanto uma campanha roda
 let vigia = null;           // timer que confere se a planilha mudou
 
+let operadorDaConta = () => null; // no app unificado, o nome vem do login (app/conta.js)
+
 function abrirEstado() {
   const l = lerLocal();
-  estado = l.pasta && l.operador ? new Estado(l.pasta, l.operador) : null;
+  const operador = operadorDaConta() || l.operador;
+  estado = l.pasta && operador ? new Estado(l.pasta, operador) : null;
   return estado;
 }
 const avisar = (canal, dados) => { const wc = conteudo(); if (wc && !wc.isDestroyed()) wc.send(canal, dados); };
@@ -178,6 +181,7 @@ function registrar(op = {}) {
   if (op.pastaDados) pastaDados = op.pastaDados;
   if (op.janela) janela = op.janela;
   if (op.conteudo) conteudo = op.conteudo;
+  if (op.operador) operadorDaConta = op.operador;
   registrarIpc();
   abrirEstado();
   if (estado) { carregarPlanilha().catch(() => {}); iniciarVigia(); }
@@ -191,7 +195,7 @@ function registrarIpc() {
   h('ajustes:ler', () => {
     const l = lerLocal();
     const cfg = estado ? estado.lerConfig() : {};
-    return { pasta: l.pasta || '', operador: l.operador || '', pronto: Boolean(estado), simulacao: !modoReal(), querReal: Boolean(l.envioReal), limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: cfg.intervaloMs ?? 1000, versao: app.getVersion() };
+    return { pasta: l.pasta || '', operador: operadorDaConta() || l.operador || '', operadorPelaConta: Boolean(operadorDaConta()), pronto: Boolean(estado), simulacao: !modoReal(), querReal: Boolean(l.envioReal), limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: cfg.intervaloMs ?? 1000, versao: app.getVersion() };
   });
   h('ajustes:escolherPasta', async () => {
     const r = await dialog.showOpenDialog(janela() || undefined, { properties: ['openDirectory', 'createDirectory'], title: 'Pasta compartilhada (Drive, OneDrive...)' });
@@ -369,4 +373,10 @@ function registrarIpc() {
   h('app:abrirPasta', () => { if (estado) shell.openPath(estado.pasta); return true; });
 }
 
-module.exports = { registrar };
+/** Outra pessoa entrou no app (o nome do histórico muda): reabre o estado. */
+function reiniciar() {
+  abrirEstado();
+  if (estado) { carregarPlanilha().catch(() => {}); iniciarVigia(); }
+}
+
+module.exports = { registrar, reiniciar };
