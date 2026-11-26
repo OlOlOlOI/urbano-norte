@@ -158,7 +158,9 @@ async function processarInstagram(db, corpo, env) {
   let novas = 0;
   for (const entrada of corpo.entry || []) {
     const contaEmpresa = String(entrada.id || '');
-    for (const ev of entrada.messaging || []) {
+    // A Meta manda as DMs em dois formatos: entry[].messaging[] e entry[].changes[] {field: 'messages', value: {...}}
+    const eventos = [...(entrada.messaging || []), ...(entrada.changes || []).filter((c) => /^(messages|messaging_seen|message_reactions)$/.test(c.field)).map((c) => c.value || {})];
+    for (const ev of eventos) {
       const eco = Boolean(ev.message && ev.message.is_echo) || String(ev.sender && ev.sender.id) === contaEmpresa;
       const cliente = String(eco ? ev.recipient && ev.recipient.id : ev.sender && ev.sender.id);
       if (!cliente || cliente === 'undefined') continue;
@@ -377,7 +379,8 @@ async function rotaApi(request, env, caminho) {
         passos.push({ item: 'Instagram manda as mensagens diretas para este app', ok: r.ok, detalhe: r.ok ? 'ligado' : r.erro });
       }
     }
-    return json({ ok: passos.every((p) => p.ok), passos });
+    // ok: o diagnóstico rodou; tudoCerto: todos os itens passaram (o app mostra cada item com ✓ ou ✗)
+    return json({ ok: true, tudoCerto: passos.every((p) => p.ok), passos });
   }
 
   if (request.method === 'GET' && caminho === '/api/conversas') {

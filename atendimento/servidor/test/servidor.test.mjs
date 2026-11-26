@@ -203,7 +203,7 @@ test('diagnóstico: confere o token e liga a conta do WhatsApp ao app quando fal
   };
   try {
     const r = await (await api(env, '/api/diagnostico', { method: 'POST' })).json();
-    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.tudoCerto, true);
     assert.deepStrictEqual(chamadas, ['GET 999?fields=display_phone_number,verified_name', 'GET 777/subscribed_apps', 'POST 777/subscribed_apps']);
     assert.match(r.passos[1].detalhe, /ligada agora/);
   } finally { globalThis.fetch = original; }
@@ -215,7 +215,8 @@ test('diagnóstico: token vencido aparece explicado', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: 190, message: 'expired' } }), { status: 401 });
   try {
     const r = await (await api(env, '/api/diagnostico', { method: 'POST' })).json();
-    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.tudoCerto, false);
     assert.match(r.passos[0].detalhe, /token/i);
   } finally { globalThis.fetch = original; }
 });
@@ -349,4 +350,13 @@ test('Instagram com token do Facebook (EAA) e sem IG_ID: descobre a conta pelas 
     assert.strictEqual(r.ok, true);
     assert.ok(chamadas.some((u) => u === 'https://graph.facebook.com/v27.0/1784199/messages'), chamadas.join('\n'));
   } finally { globalThis.fetch = original; }
+});
+
+test('Instagram: aceita também o formato "changes" (usado no teste do painel da Meta)', async () => {
+  const env = ambiente();
+  const r = await webhook(env, { object: 'instagram', entry: [{ id: '23245', time: 1, changes: [{ field: 'messages', value: { sender: { id: '12334' }, recipient: { id: '23245' }, timestamp: '1527459824', message: { mid: 'random_mid', text: 'random_text' } } }] }] });
+  assert.strictEqual(r.status, 200);
+  const c = (await (await api(env, '/api/conversas')).json()).conversas;
+  assert.strictEqual(c[0].wa_id, 'ig_12334');
+  assert.strictEqual(c[0].previa, 'random_text');
 });
