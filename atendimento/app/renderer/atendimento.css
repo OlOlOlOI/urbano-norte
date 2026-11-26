@@ -112,3 +112,12 @@ dialog img { max-width: 80vw; max-height: 75vh; display: block; border-radius: 1
 .diagnostico li { padding: 10px 12px; border-radius: 10px; background: #e6f6ec; }
 .diagnostico li.falha { background: var(--erro-fundo); color: var(--erro); }
 .diagnostico li div { font-size: 13px; margin-top: 2px; }
+
+/* canal da conversa (WhatsApp / Instagram) */
+.avatar-caixa { position: relative; display: inline-block; width: 42px; height: 42px; flex: none; }
+.canal { position: absolute; right: -3px; bottom: -3px; min-width: 20px; height: 18px; padding: 0 4px; border-radius: 9px; border: 2px solid var(--papel);
+  font-size: 9px; font-weight: 700; color: #fff; display: grid; place-items: center; letter-spacing: .02em; }
+.canal.wa { background: #25d366; }
+.canal.ig { background: linear-gradient(45deg, #f9ce34, #ee2a7b 55%, #6228d7); }
+.filtros.canais button[aria-pressed="true"] { background: var(--verde-escuro); border-color: var(--verde-escuro); }
+.midia audio { width: 280px; max-width: 100%; height: 40px; }

@@ -39,7 +39,10 @@ function formatarNumero(waId) {
   m = /^55(\d{2})(\d{4})(\d{4})$/.exec(d); if (m) return `(${m[1]}) ${m[2]}-${m[3]}`;
   return d ? '+' + d : '';
 }
-const nomeDe = (c) => (c && (c.nome || formatarNumero(c.wa_id))) || '';
+const ehIg = (c) => Boolean(c) && (c.canal === 'instagram' || String(c.wa_id || '').startsWith('ig_'));
+const nomeDe = (c) => (c && (c.nome || (ehIg(c) ? (c.usuario ? '@' + c.usuario : 'Instagram') : formatarNumero(c.wa_id)))) || '';
+const identificacao = (c) => (ehIg(c) ? `Instagram${c.usuario ? ' · @' + c.usuario : ''}` : `WhatsApp · ${formatarNumero(c.wa_id)}`);
+const selo = (c) => h('span', { class: 'canal ' + (ehIg(c) ? 'ig' : 'wa'), title: ehIg(c) ? 'Instagram' : 'WhatsApp', 'aria-label': ehIg(c) ? 'Instagram' : 'WhatsApp' }, ehIg(c) ? 'IG' : 'WA');
 const inicial = (c) => (nomeDe(c).replace(/[^A-Za-zÀ-ÿ0-9]/g, '')[0] || '?').toUpperCase();
 const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 function quando(ms) {
@@ -60,6 +63,7 @@ const JANELA_MS = 24 * 60 * 60 * 1000;
 const S = {
   cfg: null,
   filtro: 'aberta',
+  canal: '',            // '' (todos) | whatsapp | instagram
   busca: '',
   conversas: [],
   atual: null,          // wa_id aberto
@@ -138,17 +142,20 @@ function verImagem(src) {
 /* ---------- painel ---------- */
 function telaPainel() {
   const raiz = limpar($('#raiz'));
-  const busca = h('input', { type: 'search', class: 'busca', placeholder: 'Buscar por nome ou número', 'aria-label': 'Buscar conversa', value: S.busca });
+  const busca = h('input', { type: 'search', class: 'busca', placeholder: 'Buscar por nome, número ou @', 'aria-label': 'Buscar conversa', value: S.busca });
   let relogioBusca = null;
   busca.addEventListener('input', () => { clearTimeout(relogioBusca); relogioBusca = setTimeout(() => { S.busca = busca.value; carregarLista(); }, 300); });
   const filtros = [['aberta', 'Abertas'], ['resolvida', 'Resolvidas'], ['todas', 'Todas']].map(([v, rot]) =>
     h('button', { type: 'button', 'aria-pressed': String(S.filtro === v), onclick: () => { S.filtro = v; telaPainel(); carregarLista(); } }, rot));
+  const canais = [['', 'Todos'], ['whatsapp', 'WhatsApp'], ['instagram', 'Instagram']].map(([v, rot]) =>
+    h('button', { type: 'button', 'aria-pressed': String(S.canal === v), onclick: () => { S.canal = v; telaPainel(); carregarLista(); } }, rot));
   raiz.append(h('div', { class: 'painel' },
     h('aside', { class: 'lado', 'aria-label': 'Conversas' },
       h('div', { class: 'lado-topo' },
         h('div', { class: 'lado-titulo' }, h('h1', {}, 'Atendimento'),
           h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar')),
         h('div', { class: 'filtros', role: 'group', 'aria-label': 'Mostrar' }, filtros),
+        h('div', { class: 'filtros canais', role: 'group', 'aria-label': 'Canal' }, canais),
         busca),
       h('ul', { class: 'lista', id: 'lista' })),
     h('section', { class: 'conversa', id: 'conversa', 'aria-label': 'Conversa' })));
@@ -167,7 +174,7 @@ function desenharLista() {
   for (const c of S.conversas) {
     ul.append(h('li', { class: c.estado === 'resolvida' ? 'item-resolvida' : '' },
       h('button', { type: 'button', 'aria-current': String(c.wa_id === S.atual), onclick: () => abrir(c.wa_id) },
-        h('span', { class: 'avatar', 'aria-hidden': 'true' }, inicial(c)),
+        h('span', { class: 'avatar-caixa' }, h('span', { class: 'avatar', 'aria-hidden': 'true' }, inicial(c)), selo(c)),
         h('span', { class: 'item-texto' }, h('div', { class: 'item-nome' }, nomeDe(c)), h('div', { class: 'item-previa' }, c.previa || '')),
         h('span', { class: 'item-lado' }, quando(c.ultima_msg_em),
           c.nao_lidas > 0 ? h('span', { class: 'contador', 'aria-label': `${c.nao_lidas} não lidas` }, String(c.nao_lidas)) : null))));
@@ -189,16 +196,19 @@ function bolha(m) {
   if (saida && m.operador) filhos.push(h('div', { class: 'operador' }, m.operador));
   if (m.midia_id) {
     const imagem = (m.midia_mime || '').startsWith('image/') || m.tipo === 'image' || m.tipo === 'sticker';
+    const audio = m.tipo === 'audio' || (m.midia_mime || '').startsWith('audio/');
+    const naTela = imagem || audio;
     const ja = S.midias.get(m.midia_id);
     if (imagem && ja) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja) })));
+    else if (audio && ja) filhos.push(h('div', { class: 'midia' }, h('audio', { src: ja, controls: true, preload: 'metadata', 'aria-label': 'Áudio do cliente' })));
     else {
       const rotulo = { image: '📷 Foto', sticker: 'Figurinha', audio: '🎤 Áudio', video: '🎬 Vídeo', document: `📄 ${m.midia_nome || 'Documento'}` }[m.tipo] || '📎 Arquivo';
       const botao = h('button', { type: 'button', class: 'btn', onclick: async () => {
         botao.disabled = true; botao.textContent = 'Baixando…';
-        const r = await chamar(window.api.midia({ midiaId: m.midia_id, nome: m.midia_nome, abrir: !imagem }));
-        botao.disabled = false; botao.textContent = imagem ? 'Ver foto' : 'Abrir';
+        const r = await chamar(window.api.midia({ midiaId: m.midia_id, nome: m.midia_nome, abrir: !naTela }));
+        botao.disabled = false; botao.textContent = imagem ? 'Ver foto' : audio ? '▶ Ouvir' : 'Abrir';
         if (r && r.dataUrl) { S.midias.set(m.midia_id, r.dataUrl); desenharMensagens(false); }
-      } }, imagem ? 'Ver foto' : 'Abrir');
+      } }, imagem ? 'Ver foto' : audio ? '▶ Ouvir' : 'Abrir');
       filhos.push(h('div', { class: 'midia' }, rotulo, botao));
     }
   }
@@ -231,16 +241,16 @@ function desenharConversa() {
   if (!sec) return;
   limpar(sec);
   if (!S.atual) {
-    sec.append(h('div', { class: 'vazio' }, h('div', {}, h('strong', {}, 'Escolha uma conversa'), 'As mensagens dos clientes para o WhatsApp da Urbano Norte aparecem na lista ao lado.')));
+    sec.append(h('div', { class: 'vazio' }, h('div', {}, h('strong', {}, 'Escolha uma conversa'), 'As mensagens dos clientes no WhatsApp e no direct do Instagram da Urbano Norte aparecem na lista ao lado.')));
     return;
   }
   const c = S.conversa || S.conversas.find((x) => x.wa_id === S.atual) || { wa_id: S.atual };
   const j = infoJanela(c);
   const resolvida = c.estado === 'resolvida';
   sec.append(h('header', { class: 'conversa-topo' },
-    h('span', { class: 'avatar', 'aria-hidden': 'true' }, inicial(c)),
-    h('div', { class: 'quem' }, h('div', { class: 'nome' }, nomeDe(c)), h('div', { class: 'numero' }, formatarNumero(c.wa_id))),
-    h('span', { class: 'janela' + (j.aberta ? '' : ' fechada'), title: 'O WhatsApp só deixa a empresa responder com texto livre até 24 h depois da última mensagem do cliente.' }, j.texto),
+    h('span', { class: 'avatar-caixa' }, h('span', { class: 'avatar', 'aria-hidden': 'true' }, inicial(c)), selo(c)),
+    h('div', { class: 'quem' }, h('div', { class: 'nome' }, nomeDe(c)), h('div', { class: 'numero' }, identificacao(c))),
+    h('span', { class: 'janela' + (j.aberta ? '' : ' fechada'), title: 'O WhatsApp e o Instagram só deixam a empresa responder com texto livre até 24 h depois da última mensagem do cliente.' }, j.texto),
     resolvida
       ? h('button', { type: 'button', class: 'btn', onclick: async () => { if (await chamar(window.api.reabrir({ waId: S.atual }))) { aviso('Conversa reaberta.'); await recarregarTudo(); } } }, 'Reabrir')
       : h('button', { type: 'button', class: 'btn', onclick: async () => { if (await chamar(window.api.resolver({ waId: S.atual }))) { aviso('Conversa marcada como resolvida.'); await recarregarTudo(); } } }, 'Resolver')));
@@ -252,14 +262,14 @@ function desenharConversa() {
     texto.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } });
     sec.append(h('div', { class: 'escrever' }, texto, h('button', { type: 'button', class: 'btn principal', id: 'btn-enviar', onclick: enviar }, 'Enviar')));
   } else {
-    sec.append(h('div', { class: 'fechada-aviso' }, 'Já passaram 24 h desde a última mensagem do cliente. Pelas regras do WhatsApp, só dá para responder quando ele escrever de novo (ou com um modelo aprovado pela Meta, que chegará numa próxima versão).'));
+    sec.append(h('div', { class: 'fechada-aviso' }, 'Já passaram 24 h desde a última mensagem do cliente. Pelas regras do WhatsApp e do Instagram, só dá para responder quando ele escrever de novo (ou com um modelo aprovado pela Meta, que chegará numa próxima versão).'));
   }
   desenharMensagens(true);
 }
 
 /* ---------- dados ---------- */
 async function carregarLista() {
-  const r = await chamar(window.api.conversas({ estado: S.filtro === 'todas' ? '' : S.filtro, busca: S.busca }), { calado: true });
+  const r = await chamar(window.api.conversas({ estado: S.filtro === 'todas' ? '' : S.filtro, busca: S.busca, canal: S.canal }), { calado: true });
   if (!r) return;
   S.difRelogio = r.agora - Date.now();
   S.conversas = r.conversas;

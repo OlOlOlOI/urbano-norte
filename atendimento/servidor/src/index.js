@@ -11,8 +11,14 @@
 //   WHATSAPP_TOKEN  token de acesso permanente (usuário do sistema) para responder pela API
 //   CHAVE_APP       chave que o app do escritório usa para entrar aqui
 // Variável comum (wrangler.toml): PHONE_NUMBER_ID
+//
+// Instagram (opcional — só mensagens diretas):
+//   IG_TOKEN        token do Instagram (API do Instagram com login do Instagram) da conta @ da empresa
+//   IG_APP_SECRET   chave secreta do app do Instagram, se for diferente da APP_SECRET (confere a assinatura)
 
 const GRAPH = 'https://graph.facebook.com/v27.0';
+const GRAPH_IG = 'https://graph.instagram.com/v27.0';
+const ehInstagram = (contato) => String(contato).startsWith('ig_');
 const JANELA_MS = 24 * 60 * 60 * 1000;
 
 // ---------- utilidades ----------
@@ -58,7 +64,7 @@ const explicar = (e) => (e && (ERROS_META[e.code] || `${e.title || e.message || 
 /** Texto curto que representa a mensagem na lista de conversas. */
 function resumoDe(tipo, texto) {
   if (texto) return texto.slice(0, 120);
-  return { image: '📷 Foto', audio: '🎤 Áudio', video: '🎬 Vídeo', document: '📄 Documento', sticker: 'Figurinha', location: '📍 Localização', contacts: '👤 Contato' }[tipo] || 'Mensagem';
+  return { image: '📷 Foto', audio: '🎤 Áudio', video: '🎬 Vídeo', document: '📄 Documento', sticker: 'Figurinha', location: '📍 Localização', contacts: '👤 Contato', story_mention: '📣 Mencionou vocês no Story', share: '🔗 Compartilhou uma publicação' }[tipo] || 'Mensagem';
 }
 
 /** Converte uma mensagem do webhook da Meta para a nossa tabela. */
@@ -92,27 +98,115 @@ export function lerMensagemMeta(m) {
 }
 
 // ---------- banco ----------
-async function salvarEntrada(db, msg, nome) {
+async function salvarEntrada(db, msg, nome, { canal = 'whatsapp', usuario = null } = {}) {
   const t = agora();
   const ja = await db.prepare('SELECT id FROM mensagens WHERE id = ?').bind(msg.id).first();
   if (ja) return false; // a Meta pode reenviar o mesmo webhook
   await db.batch([
-    db.prepare(`INSERT INTO mensagens (id, wa_id, direcao, tipo, texto, midia_id, midia_mime, midia_nome, status, criada_em, atualizada_em)
-                VALUES (?, ?, 'entrada', ?, ?, ?, ?, ?, 'recebida', ?, ?)`)
-      .bind(msg.id, msg.waId, msg.tipo, msg.texto ?? null, msg.midia?.id ?? null, msg.midia?.mime ?? null, msg.midia?.nome ?? null, msg.quando, t),
-    db.prepare(`INSERT INTO conversas (wa_id, nome, previa, ultima_msg_em, ultima_entrada_em, nao_lidas, estado, atualizada_em)
-                VALUES (?, ?, ?, ?, ?, 1, 'aberta', ?)
+    db.prepare(`INSERT INTO mensagens (id, wa_id, direcao, tipo, texto, midia_id, midia_mime, midia_nome, midia_url, status, criada_em, atualizada_em)
+                VALUES (?, ?, 'entrada', ?, ?, ?, ?, ?, ?, 'recebida', ?, ?)`)
+      .bind(msg.id, msg.waId, msg.tipo, msg.texto ?? null, msg.midia?.id ?? null, msg.midia?.mime ?? null, msg.midia?.nome ?? null, msg.midia?.url ?? null, msg.quando, t),
+    db.prepare(`INSERT INTO conversas (wa_id, canal, nome, usuario, previa, ultima_msg_em, ultima_entrada_em, nao_lidas, estado, atualizada_em)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'aberta', ?)
                 ON CONFLICT(wa_id) DO UPDATE SET
                   nome = COALESCE(excluded.nome, conversas.nome),
+                  usuario = COALESCE(excluded.usuario, conversas.usuario),
                   previa = excluded.previa,
                   ultima_msg_em = MAX(conversas.ultima_msg_em, excluded.ultima_msg_em),
                   ultima_entrada_em = MAX(COALESCE(conversas.ultima_entrada_em, 0), excluded.ultima_entrada_em),
                   nao_lidas = conversas.nao_lidas + 1,
                   estado = 'aberta',
                   atualizada_em = excluded.atualizada_em`)
-      .bind(msg.waId, nome || null, resumoDe(msg.tipo, msg.texto), msg.quando, msg.quando, t),
+      .bind(msg.waId, canal, nome || null, usuario || null, resumoDe(msg.tipo, msg.texto), msg.quando, msg.quando, t),
   ]);
   return true;
+}
+
+// ---------- Instagram (mensagens diretas) ----------
+const TIPO_IG = { image: 'image', audio: 'audio', video: 'video', file: 'document', story_mention: 'story_mention', share: 'share', ig_reel: 'share', reel: 'share', ig_post: 'share', animated_image: 'image' };
+
+/** Converte um evento "messaging" do webhook do Instagram para a nossa tabela. */
+export function lerMensagemInstagram(ev, contato) {
+  const m = ev.message || {};
+  const anexo = (m.attachments || [])[0];
+  const tipo = anexo ? (TIPO_IG[anexo.type] || 'document') : 'text';
+  let texto = m.text ?? null;
+  let midia = null;
+  if (anexo) {
+    const url = anexo.payload && anexo.payload.url;
+    if (tipo === 'story_mention') texto = texto || 'Mencionou vocês no Story' + (url ? ` — ${url}` : '');
+    else if (tipo === 'share') texto = [texto, url].filter(Boolean).join(' ') || null;
+    else if (url) midia = { id: `${m.mid}_0`.replace(/[^\w-]/g, '').slice(-120), url, mime: { image: 'image/jpeg', audio: 'audio/mp4', video: 'video/mp4' }[tipo] || null, nome: null };
+  }
+  if (m.reply_to && m.reply_to.story) texto = `↩ Respondeu ao seu Story${texto ? ': ' + texto : ''}`;
+  return { id: m.mid, waId: contato, tipo, texto, midia, quando: Number(ev.timestamp) || agora() };
+}
+
+async function perfilInstagram(env, igsid) {
+  if (!env || !env.IG_TOKEN) return {};
+  try {
+    const r = await fetch(`${GRAPH_IG}/${igsid}?fields=name,username`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+    const d = await r.json();
+    return r.ok ? { nome: d.name || null, usuario: d.username || null } : {};
+  } catch { return {}; }
+}
+
+async function processarInstagram(db, corpo, env) {
+  let novas = 0;
+  for (const entrada of corpo.entry || []) {
+    const contaEmpresa = String(entrada.id || '');
+    for (const ev of entrada.messaging || []) {
+      const eco = Boolean(ev.message && ev.message.is_echo) || String(ev.sender && ev.sender.id) === contaEmpresa;
+      const cliente = String(eco ? ev.recipient && ev.recipient.id : ev.sender && ev.sender.id);
+      if (!cliente || cliente === 'undefined') continue;
+      const contato = `ig_${cliente}`;
+      if (ev.read) {
+        await db.prepare("UPDATE mensagens SET status = 'lida', atualizada_em = ? WHERE wa_id = ? AND direcao = 'saida' AND status IN ('enviada', 'entregue')").bind(agora(), contato).run();
+        continue;
+      }
+      if (ev.reaction) {
+        if (ev.reaction.action === 'react' && !eco) {
+          const msg = { id: `${ev.reaction.mid}_reacao_${ev.timestamp}`, waId: contato, tipo: 'reaction', texto: `Reagiu com ${ev.reaction.emoji || '❤️'}`, midia: null, quando: Number(ev.timestamp) || agora() };
+          if (await salvarEntrada(db, msg, null, { canal: 'instagram' })) novas++;
+        }
+        continue;
+      }
+      if (!ev.message || !ev.message.mid || ev.message.is_deleted) continue;
+      const msg = lerMensagemInstagram(ev, contato);
+      if (eco) {
+        // mensagem mandada pelo app do Instagram no celular (as do Atendimento já estão gravadas)
+        const ja = await db.prepare('SELECT id FROM mensagens WHERE id = ?').bind(msg.id).first();
+        if (ja) continue;
+        const t = agora();
+        await db.batch([
+          db.prepare(`INSERT INTO mensagens (id, wa_id, direcao, tipo, texto, midia_id, midia_mime, midia_url, status, operador, criada_em, atualizada_em)
+                      VALUES (?, ?, 'saida', ?, ?, ?, ?, ?, 'enviada', 'pelo app do Instagram', ?, ?)`)
+            .bind(msg.id, contato, msg.tipo, msg.texto ?? null, msg.midia?.id ?? null, msg.midia?.mime ?? null, msg.midia?.url ?? null, msg.quando, t),
+          db.prepare(`UPDATE conversas SET previa = ?, ultima_msg_em = MAX(ultima_msg_em, ?), atualizada_em = ? WHERE wa_id = ?`).bind(resumoDe(msg.tipo, msg.texto), msg.quando, t, contato),
+        ]);
+        continue;
+      }
+      const existe = await db.prepare('SELECT nome FROM conversas WHERE wa_id = ?').bind(contato).first();
+      const perfil = existe && existe.nome ? {} : await perfilInstagram(env, cliente);
+      if (await salvarEntrada(db, msg, perfil.nome, { canal: 'instagram', usuario: perfil.usuario })) novas++;
+    }
+  }
+  return novas;
+}
+
+async function instagram(env, caminho, opcoes = {}) {
+  let r;
+  try {
+    r = await fetch(`${GRAPH_IG}/${caminho}`, { ...opcoes, headers: { Authorization: `Bearer ${env.IG_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}) } });
+  } catch { return { ok: false, erro: 'Sem conexão com o Instagram.' }; }
+  let dados = null;
+  try { dados = await r.json(); } catch { /* sem JSON */ }
+  if (!r.ok || (dados && dados.error)) {
+    const e = (dados && dados.error) || {};
+    const fora = e.error_subcode === 2534022 || /outside of allowed window/i.test(e.message || '');
+    return { ok: false, erro: fora ? 'Passaram mais de 24 h desde a última mensagem do cliente no Instagram.' : explicar(e), codigo: e.code };
+  }
+  return { ok: true, dados };
 }
 
 async function atualizarStatus(db, s) {
@@ -126,7 +220,8 @@ async function atualizarStatus(db, s) {
 }
 
 /** Processa o corpo de um webhook da Meta já conferido. Devolve quantas mensagens novas entraram. */
-export async function processarWebhook(db, corpo) {
+export async function processarWebhook(db, corpo, env) {
+  if (corpo.object === 'instagram') return processarInstagram(db, corpo, env);
   let novas = 0;
   for (const entrada of corpo.entry || []) {
     for (const mudanca of entrada.changes || []) {
@@ -146,8 +241,7 @@ export async function processarWebhook(db, corpo) {
 async function graph(env, caminho, opcoes = {}) {
   const r = await fetch(`${GRAPH}/${caminho}`, {
     ...opcoes,
-    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}), ...(opcoes.headers || {}) },
-  });
+    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}), ...(opcoes.headers || {}) },  });
   let dados = null;
   try { dados = await r.json(); } catch { /* sem JSON */ }
   if (!r.ok || (dados && dados.error)) return { ok: false, erro: explicar(dados && dados.error), codigo: dados && dados.error && dados.error.code };
@@ -160,12 +254,21 @@ async function enviarTexto(env, db, waId, texto, operador) {
   if (!conversa.ultima_entrada_em || agora() - conversa.ultima_entrada_em > JANELA_MS) {
     return erro(409, ERROS_META[131047]);
   }
-  const r = await graph(env, `${env.PHONE_NUMBER_ID}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: waId, type: 'text', text: { preview_url: false, body: texto } }),
-  });
-  if (!r.ok) return erro(502, r.erro);
-  const id = r.dados.messages && r.dados.messages[0] && r.dados.messages[0].id;
+  let id;
+  if (ehInstagram(waId)) {
+    if (!env.IG_TOKEN) return erro(503, 'O Instagram ainda não foi ligado ao servidor (falta o IG_TOKEN).');
+    const r = await instagram(env, 'me/messages', { method: 'POST', body: JSON.stringify({ recipient: { id: waId.slice(3) }, message: { text: texto } }) });
+    if (!r.ok) return erro(502, r.erro);
+    id = r.dados.message_id;
+  } else {
+    const r = await graph(env, `${env.PHONE_NUMBER_ID}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: waId, type: 'text', text: { preview_url: false, body: texto } }),
+    });
+    if (!r.ok) return erro(502, r.erro);
+    id = r.dados.messages && r.dados.messages[0] && r.dados.messages[0].id;
+  }
+  if (!id) return erro(502, 'A Meta não devolveu o código da mensagem.');
   const t = agora();
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO mensagens (id, wa_id, direcao, tipo, texto, status, operador, criada_em, atualizada_em)
@@ -187,12 +290,14 @@ async function rotaWebhook(request, env, ctx) {
   }
   if (request.method !== 'POST') return new Response('Método não permitido', { status: 405 });
   const bruto = await request.arrayBuffer();
-  if (!(await assinaturaValida(env.APP_SECRET, bruto, request.headers.get('X-Hub-Signature-256')))) {
+  const assinatura = request.headers.get('X-Hub-Signature-256');
+  const valida = (await assinaturaValida(env.APP_SECRET, bruto, assinatura)) || (await assinaturaValida(env.IG_APP_SECRET, bruto, assinatura));
+  if (!valida) {
     return new Response('Assinatura inválida', { status: 401 });
   }
   let corpo;
   try { corpo = JSON.parse(new TextDecoder().decode(bruto)); } catch { return new Response('JSON inválido', { status: 400 }); }
-  const tarefa = processarWebhook(env.DB, corpo);
+  const tarefa = processarWebhook(env.DB, corpo, env);
   // responde rápido para a Meta; o banco termina de gravar em seguida
   if (ctx && ctx.waitUntil) ctx.waitUntil(tarefa); else await tarefa;
   return new Response('ok', { status: 200 });
@@ -227,6 +332,27 @@ async function rotaApi(request, env, caminho) {
         passos.push({ item: 'Conta do WhatsApp manda mensagens para este app', ok: r.ok, detalhe: r.ok ? 'ligada agora' : (lista.ok ? r.erro : lista.erro) });
       }
     }
+    if (env.APP_ID && env.APP_SECRET) {
+      // Para onde a Meta manda os avisos deste app (token do próprio app: APP_ID|APP_SECRET)
+      const r = await fetch(`${GRAPH}/${env.APP_ID}/subscriptions?access_token=${encodeURIComponent(`${env.APP_ID}|${env.APP_SECRET}`)}`).then((x) => x.json()).catch(() => null);
+      const wa = r && r.data && r.data.find((x) => x.object === 'whatsapp_business_account');
+      const nosso = new URL(request.url).origin + '/webhook';
+      const campos = wa ? (wa.fields || []).map((f) => f.name || f) : [];
+      passos.push({
+        item: 'Webhook do app aponta para este servidor',
+        ok: Boolean(wa && wa.active && wa.callback_url === nosso && campos.includes('messages')),
+        detalhe: !r ? 'não consegui consultar' : r.error ? explicar(r.error) + ' (confira a chave secreta do app: APP_SECRET)' : !wa ? 'nenhum webhook de WhatsApp cadastrado' : `${wa.active ? 'ativo' : 'INATIVO'} → ${wa.callback_url} · campos: ${campos.join(', ') || 'nenhum'}`,
+      });
+    }
+    if (env.IG_TOKEN) {
+      const eu = await instagram(env, 'me?fields=user_id,username');
+      passos.push({ item: 'Instagram conectado', ok: eu.ok, detalhe: eu.ok ? `@${eu.dados.username}` : eu.erro });
+      if (eu.ok) {
+        // a conta do Instagram precisa pedir os avisos de mensagens para este app
+        const r = await instagram(env, 'me/subscribed_apps?subscribed_fields=messages,message_reactions,messaging_seen', { method: 'POST' });
+        passos.push({ item: 'Instagram manda as mensagens diretas para este app', ok: r.ok, detalhe: r.ok ? 'ligado' : r.erro });
+      }
+    }
     return json({ ok: passos.every((p) => p.ok), passos });
   }
 
@@ -236,7 +362,9 @@ async function rotaApi(request, env, caminho) {
     let sql = 'SELECT * FROM conversas';
     const cond = []; const args = [];
     if (estado === 'aberta' || estado === 'resolvida') { cond.push('estado = ?'); args.push(estado); }
-    if (busca) { cond.push('(nome LIKE ? OR wa_id LIKE ?)'); args.push(`%${busca}%`, `%${busca.replace(/\D/g, '') || busca}%`); }
+    const canal = url.searchParams.get('canal');
+    if (canal === 'whatsapp' || canal === 'instagram') { cond.push('canal = ?'); args.push(canal); }
+    if (busca) { cond.push('(nome LIKE ? OR usuario LIKE ? OR wa_id LIKE ?)'); args.push(`%${busca}%`, `%${busca.replace(/^@/, '')}%`, `%${busca.replace(/\D/g, '') || busca}%`); }
     if (cond.length) sql += ' WHERE ' + cond.join(' AND ');
     sql += ' ORDER BY ultima_msg_em DESC LIMIT 300';
     const { results } = await db.prepare(sql).bind(...args).all();
@@ -245,7 +373,7 @@ async function rotaApi(request, env, caminho) {
   }
 
   if (partes[0] === 'api' && partes[1] === 'conversas' && partes[2]) {
-    const waId = partes[2].replace(/\D/g, '');
+    const waId = partes[2].startsWith('ig_') ? 'ig_' + partes[2].slice(3).replace(/\D/g, '') : partes[2].replace(/\D/g, '');
     const acao = partes[3];
     if (request.method === 'GET' && acao === 'mensagens') {
       const desde = Number(url.searchParams.get('desde')) || 0;
@@ -267,7 +395,9 @@ async function rotaApi(request, env, caminho) {
       await db.prepare('UPDATE conversas SET nao_lidas = 0, atualizada_em = ? WHERE wa_id = ?').bind(agora(), waId).run();
       // dois tiques azuis no celular do cliente (não atrapalha se falhar)
       const ultima = await db.prepare("SELECT id FROM mensagens WHERE wa_id = ? AND direcao = 'entrada' ORDER BY criada_em DESC, rowid DESC LIMIT 1").bind(waId).first();
-      if (ultima && env.WHATSAPP_TOKEN) {
+      if (ehInstagram(waId)) {
+        if (env.IG_TOKEN) await instagram(env, 'me/messages', { method: 'POST', body: JSON.stringify({ recipient: { id: waId.slice(3) }, sender_action: 'mark_seen' }) }).catch(() => {});
+      } else if (ultima && env.WHATSAPP_TOKEN) {
         await graph(env, `${env.PHONE_NUMBER_ID}/messages`, { method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: ultima.id }) }).catch(() => {});
       }
       return json({ ok: true });
@@ -281,8 +411,13 @@ async function rotaApi(request, env, caminho) {
 
   if (request.method === 'GET' && partes[0] === 'api' && partes[1] === 'midia' && partes[2]) {
     const midiaId = partes[2].replace(/[^\w-]/g, '');
-    const existe = await db.prepare('SELECT midia_mime FROM mensagens WHERE midia_id = ?').bind(midiaId).first();
+    const existe = await db.prepare('SELECT midia_mime, midia_url FROM mensagens WHERE midia_id = ?').bind(midiaId).first();
     if (!existe) return erro(404, 'Mídia não encontrada.');
+    if (existe.midia_url) {
+      const arq = await fetch(existe.midia_url);
+      if (!arq.ok) return erro(502, 'O Instagram não entregou o arquivo (ele pode ter expirado).');
+      return new Response(arq.body, { headers: { 'Content-Type': arq.headers.get('Content-Type') || existe.midia_mime || 'application/octet-stream', 'Cache-Control': 'no-store' } });
+    }
     const info = await graph(env, midiaId);
     if (!info.ok) return erro(502, info.erro);
     const arquivo = await fetch(info.dados.url, { headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } });
@@ -300,16 +435,16 @@ const PRIVACIDADE = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-
 <style>body{font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2a2c;max-width:760px;margin:0 auto;padding:32px 20px;background:#f1f4f1}
 h1{color:#007a43;font-size:28px;margin:0 0 4px}h2{color:#007a43;font-size:19px;margin-top:28px}.data{color:#5d6360;margin:0 0 20px}</style></head><body>
 <h1>Política de Privacidade</h1>
-<p class="data">Atendimento Urbano Norte (WhatsApp) — Urbano Norte, transporte por aplicativo, Rio Verde-GO. Atualizada em 25/11/2026.</p>
-<p>Esta política explica como a Urbano Norte trata os dados de quem conversa com a empresa pelo WhatsApp, em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
+<p class="data">Atendimento Urbano Norte (WhatsApp e Instagram) — Urbano Norte, transporte por aplicativo, Rio Verde-GO. Atualizada em 25/11/2026.</p>
+<p>Esta política explica como a Urbano Norte trata os dados de quem conversa com a empresa pelo WhatsApp ou pelas mensagens diretas do Instagram, em conformidade com a Lei Geral de Proteção de Dados (Lei 13.709/2018).</p>
 <h2>Quais dados usamos</h2>
-<p>Quando você manda mensagem para o WhatsApp da Urbano Norte, recebemos pela plataforma oficial do WhatsApp (Meta): seu número de telefone, o nome do seu perfil, o conteúdo das mensagens (texto, fotos, áudios, documentos e localização que você enviar) e a data e hora de cada mensagem.</p>
+<p>Quando você manda mensagem para o WhatsApp ou para o direct do Instagram da Urbano Norte, recebemos pelas plataformas oficiais da Meta: seu número de telefone (WhatsApp) ou seu nome de usuário e identificador (Instagram), o nome do seu perfil, o conteúdo das mensagens (texto, fotos, áudios, documentos e localização que você enviar) e a data e hora de cada mensagem.</p>
 <h2>Para que usamos</h2>
 <p>Somente para responder ao seu atendimento (dúvidas, objetos esquecidos, reclamações, informações sobre corridas) e, quando você autorizar, para enviar comunicados da Urbano Norte. Não vendemos nem compartilhamos seus dados com terceiros para fins de publicidade.</p>
 <h2>Onde ficam e por quanto tempo</h2>
-<p>As conversas ficam guardadas em servidor seguro, acessado apenas pela equipe de atendimento da Urbano Norte com chave de acesso. Mantemos o histórico enquanto for necessário para o atendimento e para obrigações legais. Arquivos de mídia ficam com a Meta e expiram conforme as regras do WhatsApp.</p>
+<p>As conversas ficam guardadas em servidor seguro, acessado apenas pela equipe de atendimento da Urbano Norte com chave de acesso. Mantemos o histórico enquanto for necessário para o atendimento e para obrigações legais. Arquivos de mídia ficam com a Meta e expiram conforme as regras do WhatsApp e do Instagram.</p>
 <h2 id="exclusao">Seus direitos e como apagar seus dados</h2>
-<p>Você pode pedir a qualquer momento: acesso, correção ou exclusão dos seus dados, ou deixar de receber comunicados. Basta enviar uma mensagem para o próprio WhatsApp da Urbano Norte dizendo, por exemplo, "quero apagar meus dados" ou "não quero receber mensagens". Atendemos em até 15 dias.</p>
+<p>Você pode pedir a qualquer momento: acesso, correção ou exclusão dos seus dados, ou deixar de receber comunicados. Basta enviar uma mensagem para o WhatsApp ou para o direct do Instagram da Urbano Norte dizendo, por exemplo, "quero apagar meus dados" ou "não quero receber mensagens". Atendemos em até 15 dias.</p>
 <h2>Contato</h2>
 <p>Dúvidas sobre esta política: fale com a Urbano Norte pelo WhatsApp oficial ou pelos canais oficiais da empresa.</p>
 </body></html>`;

@@ -2,8 +2,10 @@
 -- Datas em milissegundos desde 1970 (Date.now()).
 
 CREATE TABLE IF NOT EXISTS conversas (
-  wa_id TEXT PRIMARY KEY,            -- número do cliente no formato do WhatsApp (só dígitos)
-  nome TEXT,                         -- nome do perfil do WhatsApp
+  wa_id TEXT PRIMARY KEY,            -- contato: número do WhatsApp (só dígitos) ou "ig_<id>" no Instagram
+  canal TEXT NOT NULL DEFAULT 'whatsapp', -- whatsapp | instagram
+  nome TEXT,                         -- nome do perfil
+  usuario TEXT,                      -- @ do Instagram
   previa TEXT,                       -- texto curto da última mensagem
   ultima_msg_em INTEGER NOT NULL,    -- última mensagem (entrada ou saída)
   ultima_entrada_em INTEGER,         -- última mensagem DO CLIENTE: abre a janela de 24 h
@@ -21,6 +23,7 @@ CREATE TABLE IF NOT EXISTS mensagens (
   midia_id TEXT,
   midia_mime TEXT,
   midia_nome TEXT,
+  midia_url TEXT,                    -- Instagram: link direto do arquivo (no WhatsApp a mídia é buscada pelo midia_id)
   status TEXT NOT NULL,              -- recebida | enviada | entregue | lida | falhou
   erro TEXT,
   operador TEXT,                     -- quem respondeu (saídas)

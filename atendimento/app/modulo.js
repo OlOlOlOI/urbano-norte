@@ -56,7 +56,8 @@ async function chamarServidor(caminho, { metodo = 'GET', corpo, cfg = lerConfig(
   return dados;
 }
 
-const enc = (waId) => encodeURIComponent(String(waId || '').replace(/\D/g, ''));
+// número do WhatsApp (só dígitos) ou "ig_<id>" do Instagram
+const enc = (waId) => { const v = String(waId || ''); return encodeURIComponent(v.startsWith('ig_') ? 'ig_' + v.slice(3).replace(/\D/g, '') : v.replace(/\D/g, '')); };
 
 // ---------- vigia de mensagens novas (avisos e contador na aba) ----------
 let ultimoTotal = null;
@@ -124,9 +125,10 @@ function registrarIpc() {
   });
   h('atendimento:config:apagar', () => { fs.rmSync(arqConfig(), { force: true }); aoNaoLidas(0); return true; });
 
-  h('atendimento:conversas', ({ estado, busca } = {}) => {
+  h('atendimento:conversas', ({ estado, busca, canal } = {}) => {
     const q = new URLSearchParams();
     if (estado) q.set('estado', estado);
+    if (canal) q.set('canal', canal);
     if (busca) q.set('busca', String(busca).slice(0, 60));
     return chamarServidor('/api/conversas' + (q.toString() ? '?' + q : ''));
   });
@@ -136,15 +138,15 @@ function registrarIpc() {
   h('atendimento:resolver', async ({ waId }) => { await chamarServidor(`/api/conversas/${enc(waId)}/resolver`, { metodo: 'POST' }); conferirNovidades(); return true; });
   h('atendimento:reabrir', ({ waId }) => chamarServidor(`/api/conversas/${enc(waId)}/reabrir`, { metodo: 'POST' }));
 
-  // Fotos aparecem na conversa; outros arquivos (PDF, áudio, vídeo) abrem no programa padrão do computador.
+  // Fotos e áudios aparecem na própria conversa; outros arquivos (PDF, vídeo) abrem no programa padrão do computador.
   h('atendimento:midia', async ({ midiaId, nome, abrir }) => {
     const id = String(midiaId || '').replace(/[^\w-]/g, '');
     const r = await chamarServidor(`/api/midia/${id}`, { binario: true });
     if (!r.bytes) throw new Error('Não foi possível baixar o arquivo.');
-    if (!abrir && r.tipo.startsWith('image/') && r.bytes.length < 10 * 1024 * 1024) {
+    if (!abrir && /^(image|audio)\//.test(r.tipo) && r.bytes.length < 16 * 1024 * 1024) {
       return { dataUrl: `data:${r.tipo};base64,${r.bytes.toString('base64')}` };
     }
-    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[r.tipo.split(';')[0]] || '';
+    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[r.tipo.split(';')[0]] || '';
     const seguro = String(nome || `arquivo-${id}`).replace(/[^\w.\- ]/g, '_').slice(0, 80);
     const pasta = path.join(app.getPath('temp'), 'atendimento-urbano-norte');
     fs.mkdirSync(pasta, { recursive: true });

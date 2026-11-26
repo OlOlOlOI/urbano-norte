@@ -219,3 +219,104 @@ test('diagnóstico: token vencido aparece explicado', async () => {
     assert.match(r.passos[0].detalhe, /token/i);
   } finally { globalThis.fetch = original; }
 });
+
+// ---------- Instagram (mensagens diretas) ----------
+const IG_EMPRESA = '17841400000000000';
+const dmInstagram = (eventos) => ({ object: 'instagram', entry: [{ id: IG_EMPRESA, time: Date.now(), messaging: eventos }] });
+const dm = (de, mid, extra = {}) => ({ sender: { id: de }, recipient: { id: IG_EMPRESA }, timestamp: Date.now(), message: { mid, ...extra } });
+
+test('Instagram: DM vira conversa com canal, nome e @ (buscados no perfil)', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'IGTOKEN' };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => String(url).includes('graph.instagram.com') && String(url).includes('fields=name,username')
+    ? Response.json({ name: 'Bia Souza', username: 'bia.souza' }) : original(url);
+  try {
+    await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi! Vocês atendem em Montividiu?' })]));
+  } finally { globalThis.fetch = original; }
+  const c = (await (await api(env, '/api/conversas')).json()).conversas[0];
+  assert.strictEqual(c.wa_id, 'ig_900');
+  assert.strictEqual(c.canal, 'instagram');
+  assert.strictEqual(c.nome, 'Bia Souza');
+  assert.strictEqual(c.usuario, 'bia.souza');
+  assert.strictEqual(c.nao_lidas, 1);
+  const so = (await (await api(env, '/api/conversas?canal=instagram')).json()).conversas.length;
+  const nenhuma = (await (await api(env, '/api/conversas?canal=whatsapp')).json()).conversas.length;
+  assert.deepStrictEqual([so, nenhuma], [1, 0]);
+  assert.strictEqual((await (await api(env, '/api/conversas?busca=@bia')).json()).conversas.length, 1);
+});
+
+test('Instagram: responder sai pela API do Instagram e "lida" vira visto no direct', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'IGTOKEN' };
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, op = {}) => {
+    chamadas.push({ url: String(url), corpo: op.body ? JSON.parse(op.body) : null, auth: op.headers && op.headers.Authorization });
+    return Response.json({ recipient_id: '900', message_id: 'ig.mid.SAIDA' });
+  };
+  try {
+    const r = await (await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'Atendemos sim!', operador: 'Rayan' }) })).json();
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(chamadas[0].url, 'https://graph.instagram.com/v27.0/me/messages');
+    assert.strictEqual(chamadas[0].auth, 'Bearer IGTOKEN');
+    assert.deepStrictEqual(chamadas[0].corpo, { recipient: { id: '900' }, message: { text: 'Atendemos sim!' } });
+    await api(env, '/api/conversas/ig_900/lida', { method: 'POST' });
+    assert.deepStrictEqual(chamadas[1].corpo, { recipient: { id: '900' }, sender_action: 'mark_seen' });
+  } finally { globalThis.fetch = original; }
+  // o próprio Instagram devolve o eco da nossa mensagem: não duplica
+  await webhook(env, dmInstagram([{ sender: { id: IG_EMPRESA }, recipient: { id: '900' }, timestamp: Date.now(), message: { mid: 'ig.mid.SAIDA', text: 'Atendemos sim!', is_echo: true } }]));
+  // cliente viu a mensagem
+  await webhook(env, dmInstagram([{ sender: { id: '900' }, recipient: { id: IG_EMPRESA }, timestamp: Date.now(), read: { mid: 'ig.mid.SAIDA' } }]));
+  const msgs = (await (await api(env, '/api/conversas/ig_900/mensagens')).json()).mensagens;
+  assert.strictEqual(msgs.filter((m) => m.direcao === 'saida').length, 1);
+  assert.strictEqual(msgs.find((m) => m.id === 'ig.mid.SAIDA').status, 'lida');
+});
+
+test('Instagram: resposta mandada pelo celular (eco) aparece na conversa como saída', async () => {
+  const env = ambiente();
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  await webhook(env, dmInstagram([{ sender: { id: IG_EMPRESA }, recipient: { id: '900' }, timestamp: Date.now(), message: { mid: 'ig.mid.CEL', text: 'Respondi pelo celular', is_echo: true } }]));
+  const msgs = (await (await api(env, '/api/conversas/ig_900/mensagens')).json()).mensagens;
+  const eco = msgs.find((m) => m.id === 'ig.mid.CEL');
+  assert.strictEqual(eco.direcao, 'saida');
+  assert.strictEqual(eco.operador, 'pelo app do Instagram');
+});
+
+test('Instagram: áudio, foto, menção no Story e resposta ao Story', async () => {
+  const env = ambiente();
+  await webhook(env, dmInstagram([
+    dm('900', 'ig.mid.A', { attachments: [{ type: 'audio', payload: { url: 'https://cdn.exemplo/audio.mp4' } }] }),
+    dm('900', 'ig.mid.F', { attachments: [{ type: 'image', payload: { url: 'https://cdn.exemplo/foto.jpg' } }] }),
+    dm('900', 'ig.mid.S', { attachments: [{ type: 'story_mention', payload: { url: 'https://cdn.exemplo/story' } }] }),
+    dm('900', 'ig.mid.R', { text: 'Que legal!', reply_to: { story: { id: '1', url: 'https://cdn.exemplo/s' } } }),
+  ]));
+  const msgs = (await (await api(env, '/api/conversas/ig_900/mensagens')).json()).mensagens;
+  const por = Object.fromEntries(msgs.map((m) => [m.id, m]));
+  assert.strictEqual(por['ig.mid.A'].tipo, 'audio');
+  assert.strictEqual(por['ig.mid.A'].midia_url, 'https://cdn.exemplo/audio.mp4');
+  assert.strictEqual(por['ig.mid.F'].tipo, 'image');
+  assert.match(por['ig.mid.S'].texto, /Mencionou vocês no Story/);
+  assert.strictEqual(por['ig.mid.R'].texto, '↩ Respondeu ao seu Story: Que legal!');
+  // o app baixa o áudio pelo servidor (link direto do Instagram)
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => new Response(new Uint8Array([7, 7]), { status: 200, headers: { 'Content-Type': 'audio/mp4' } });
+  try {
+    const r = await api(env, `/api/midia/${por['ig.mid.A'].midia_id}`);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers.get('Content-Type'), 'audio/mp4');
+  } finally { globalThis.fetch = original; }
+});
+
+test('Instagram: webhook assinado com a chave do app do Instagram também é aceito', async () => {
+  const env = { ...ambiente(), APP_SECRET: 'outra', IG_APP_SECRET: SEGREDO };
+  const r = await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  assert.strictEqual(r.status, 200);
+});
+
+test('Instagram sem IG_TOKEN: avisa ao tentar responder', async () => {
+  const env = ambiente();
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  const r = await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) });
+  assert.strictEqual(r.status, 503);
+  assert.match((await r.json()).erro, /Instagram/);
+});

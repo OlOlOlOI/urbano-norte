@@ -7,7 +7,7 @@ Marca: grafite #414042, verde-escuro #007a43, verde #00a651, lima #68c52f, carv�
 
 - `sorteio/` — sorteio de corridas (web PWA + desktop Electron). Contexto e regras em `sorteio/CLAUDE.md`.
 - `disparo/` — disparo de campanhas por WhatsApp (desktop Electron, modo simulação). Contexto em `disparo/README.md`.
-- `atendimento/` — atendimento pelo WhatsApp: `servidor/` (Cloudflare Worker + D1, recebe o webhook da Meta) e `app/` (aba no app). Contexto em `atendimento/LEIA-ME.md`.
+- `atendimento/` — atendimento pelo WhatsApp e direct do Instagram: `servidor/` (Cloudflare Worker + D1, recebe o webhook da Meta) e `app/` (aba no app). Contexto em `atendimento/LEIA-ME.md`.
 - `app/` — app desktop unificado (Sorteio + Disparo + Atendimento em abas). Contexto em `app/LEIA-ME.md`.
 
 Cada sistema é independente (seu próprio `package.json`); comandos `npm` rodam dentro da pasta do sistema.
@@ -33,3 +33,4 @@ Criado em 2026-11-25 a partir dos repositórios `OlOlOlOI/sorteio-urbano-norte` 
 - O número de teste da Meta (+1) NÃO entrega no Brasil (erro 130497: restrição da Meta a envio de outro país para o Brasil). É preciso um número brasileiro da empresa (Etapa 2). Em 2026-11-25 a empresa ainda não tinha esse número; a ideia é um fixo virtual ou eSIM pré-pago, usado só para receber o código uma vez.
 - O WhatsApp guarda celulares brasileiros sem o 9 extra (wa_id 5564XXXXXXXX); a tela mostra com o 9.
 - Campanhas do Disparo continuam em simulação; só o teste "no meu número" e o Atendimento usam a API de verdade.
+- Instagram no Atendimento: só mensagens diretas (decisão do dono: sem menções/marcações/comentários). Conversas do Instagram usam id `ig_<IGSID>` e canal `instagram`; envio por graph.instagram.com com IG_TOKEN.

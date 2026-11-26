@@ -1,19 +1,26 @@
 # Atendimento Urbano Norte
 
-Aba **Atendimento** do app unificado: as conversas do WhatsApp da empresa, lidas e respondidas pelo computador do escritório.
+Aba **Atendimento** do app unificado: as conversas do **WhatsApp** e as **mensagens diretas do Instagram** da empresa, lidas e respondidas pelo computador do escritório (menções, marcações e comentários do Instagram ficam de fora, de propósito).
 
 - `servidor/` — fica na nuvem (Cloudflare Workers + banco D1, plano grátis). Recebe da Meta as mensagens dos clientes 24 h por dia e serve o app.
 - `app/` — a aba no app desktop (copiada para `app/modulos/atendimento` pelo `montar-modulos.js`).
 
 ## O que já faz (versão 1)
 - Lista de conversas (abertas / resolvidas / todas), busca por nome ou número, contador de não lidas na aba e no ícone do app, aviso do sistema quando chega mensagem com o app em segundo plano.
-- Conversa com texto, fotos (aparecem na tela), áudio/vídeo/documento (abrem no programa do computador), localização e contatos.
+- WhatsApp e Instagram na mesma lista, com selo do canal (WA/IG) e filtro Todos / WhatsApp / Instagram; no Instagram aparece o @.
+- Conversa com texto, fotos e áudios (aparecem e tocam na tela), vídeo/documento (abrem no programa do computador), localização, contatos, respostas e menções em Stories (Instagram).
 - Responder com texto; mostra quem respondeu e se foi enviada / entregue / lida / não entregue (com o motivo).
 - Marca como lida no celular do cliente (dois tiques azuis) ao abrir a conversa.
 - Indica a janela de 24 h do WhatsApp e bloqueia texto livre quando ela fecha.
 - Resolver / reabrir conversa (se o cliente escrever de novo, ela reabre sozinha).
 
-Ainda não: enviar fotos/arquivos, responder com modelo aprovado fora das 24 h, transferir conversa entre pessoas.
+Ainda não: enviar fotos/arquivos/áudio, responder com modelo aprovado fora das 24 h, transferir conversa entre pessoas.
+
+## Instagram
+- Banco: rode uma vez `npx wrangler d1 execute atendimento-urbano-norte --remote --file=migracoes/001-instagram.sql` (já feito em 2026-11-25).
+- Na Meta: adicionar o caso de uso de mensagens do Instagram, ligar a conta @ da empresa, gerar o token e cadastrar o mesmo webhook (`/webhook`, mesma palavra) para o objeto Instagram, campo `messages`.
+- `bash configurar-instagram.sh` grava o IG_TOKEN (e IG_APP_SECRET, se a Meta mostrar uma chave própria do Instagram).
+- Para receber DM de qualquer pessoa, a Meta exige análise do app (App Review) da permissão de mensagens do Instagram; antes disso, só contas com papel no app.
 
 ## Testar no próprio computador (sem Cloudflare, sem Meta)
 ```
