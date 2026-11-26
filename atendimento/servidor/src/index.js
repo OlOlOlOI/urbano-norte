@@ -203,8 +203,10 @@ async function processarInstagram(db, corpo, env) {
 // configurado: procura a conta do Instagram ligada às Páginas que o token enxerga. Fica guardado enquanto o servidor roda.
 let igIdDescoberto = null;
 async function idDoInstagram(env) {
+  // token do Instagram (IG...): usa graph.instagram.com/me, sem ID; token do Facebook (EAA...): graph.facebook.com/{ID}
+  if (String(env.IG_TOKEN || '').startsWith('IG')) return null;
   if (env.IG_ID) return env.IG_ID;
-  if (!String(env.IG_TOKEN || '').startsWith('EAA')) return null; // token do Instagram (IG...): usa graph.instagram.com/me
+  if (!String(env.IG_TOKEN || '').startsWith('EAA')) return null;
   if (igIdDescoberto) return igIdDescoberto;
   try {
     const r = await fetch(`${GRAPH}/me/accounts?fields=instagram_business_account{id,username}&limit=50`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
@@ -229,7 +231,10 @@ async function instagram(env, caminho, opcoes = {}) {
   if (!r.ok || (dados && dados.error)) {
     const e = (dados && dados.error) || {};
     const fora = e.error_subcode === 2534022 || /outside of allowed window/i.test(e.message || '');
-    return { ok: false, erro: fora ? 'Passaram mais de 24 h desde a última mensagem do cliente no Instagram.' : explicar(e), codigo: e.code };
+    const erro = fora ? 'Passaram mais de 24 h desde a última mensagem do cliente no Instagram.'
+      : e.code === 190 ? 'O token do Instagram no servidor venceu ou é inválido. Gere outro na Meta (API do Instagram > Gerar token da urbanorioverde) e grave com o configurar-instagram.sh.'
+      : explicar(e);
+    return { ok: false, erro, codigo: e.code };
   }
   return { ok: true, dados };
 }
@@ -372,7 +377,30 @@ async function rotaApi(request, env, caminho) {
     if (env.IG_TOKEN) {
       const igId = await idDoInstagram(env);
       const eu = await instagram(env, igId ? 'me?fields=username' : 'me?fields=user_id,username');
-      passos.push({ item: 'Instagram conectado', ok: eu.ok, detalhe: eu.ok ? `@${eu.dados.username}${igId ? ` (conta ${igId})` : ''}` : eu.erro });
+      // tipo do token pelas primeiras letras (não é segredo): IGAA… = login do Instagram; EAA… = Facebook/usuário do sistema
+      const tok = String(env.IG_TOKEN);
+      const tipo = tok.startsWith('IG') ? 'token do Instagram (IG…)' : tok.startsWith('EAA') ? 'token do Facebook (EAA…)' : `formato desconhecido (começa com "${tok.slice(0, 3)}…", ${tok.length} caracteres)`;
+      passos.push({ item: 'Instagram conectado', ok: eu.ok, detalhe: (eu.ok ? `@${eu.dados.username}${igId ? ` (conta ${igId})` : ''}` : eu.erro) + ` · ${tipo}` });
+      if (eu.ok && igId) {
+        // Token do Facebook (login unificado): as DMs do Instagram chegam pela Página do Facebook ligada à conta,
+        // e é a Página que precisa assinar o app (com o token da própria Página).
+        let paginas = null;
+        try {
+          const r = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+          paginas = await r.json();
+        } catch { /* sem rede */ }
+        const lista = (paginas && paginas.data) || [];
+        const pagina = lista.find((p) => p.instagram_business_account && p.instagram_business_account.id === igId) || null;
+        if (!paginas || paginas.error) {
+          passos.push({ item: 'Página do Facebook ligada ao Instagram', ok: false, detalhe: paginas && paginas.error ? explicar(paginas.error) + ' — o token precisa das permissões pages_show_list e pages_manage_metadata.' : 'não consegui consultar' });
+        } else if (!pagina) {
+          passos.push({ item: 'Página do Facebook ligada ao Instagram', ok: false, detalhe: lista.length ? `o token enxerga ${lista.length} página(s), mas nenhuma está ligada a esta conta do Instagram` : 'o token não enxerga nenhuma Página do Facebook (falta a permissão pages_show_list ou a Página não foi incluída ao gerar o token)' });
+        } else {
+          const r = await fetch(`${GRAPH}/${pagina.id}/subscribed_apps?subscribed_fields=messages,messaging_seen,message_reactions`, { method: 'POST', headers: { Authorization: `Bearer ${pagina.access_token}` } }).then((x) => x.json()).catch(() => null);
+          const ok = Boolean(r && r.success);
+          passos.push({ item: 'Página do Facebook manda as DMs do Instagram para este app', ok, detalhe: ok ? `ligada: ${pagina.name}` : (r && r.error ? explicar(r.error) + ' — o token precisa da permissão pages_manage_metadata.' : 'não consegui ligar') });
+        }
+      }
       if (eu.ok && !igId) {
         // a conta do Instagram precisa pedir os avisos de mensagens para este app
         const r = await instagram(env, 'me/subscribed_apps?subscribed_fields=messages,message_reactions,messaging_seen', { method: 'POST' });

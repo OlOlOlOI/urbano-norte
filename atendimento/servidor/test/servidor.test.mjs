@@ -323,7 +323,7 @@ test('Instagram sem IG_TOKEN: avisa ao tentar responder', async () => {
 });
 
 test('Instagram com login unificado (IG_ID): envia por graph.facebook.com/{IG_ID}/messages', async () => {
-  const env = { ...ambiente(), IG_TOKEN: 'SUAT', IG_ID: '17841400000000000' };
+  const env = { ...ambiente(), IG_TOKEN: 'EAASUAT', IG_ID: '17841400000000000' };
   await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
   const chamadas = [];
   const original = globalThis.fetch;
@@ -359,4 +359,16 @@ test('Instagram: aceita também o formato "changes" (usado no teste do painel da
   const c = (await (await api(env, '/api/conversas')).json()).conversas;
   assert.strictEqual(c[0].wa_id, 'ig_12334');
   assert.strictEqual(c[0].previa, 'random_text');
+});
+
+test('Instagram: token IG… ignora o IG_ID e usa graph.instagram.com/me', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'IGAAxyz', IG_ID: '17841400000000000' };
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => { chamadas.push(String(url)); return Response.json({ recipient_id: '900', message_id: 'ig.mid.Z' }); };
+  try {
+    await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) });
+    assert.strictEqual(chamadas[0], 'https://graph.instagram.com/v27.0/me/messages');
+  } finally { globalThis.fetch = original; }
 });
