@@ -361,9 +361,7 @@ function registrarIpc() {
       const { parametrosPara } = require('./core/modelo-meta');
       const primeiro = String((estado && estado.operador) || '').split(' ')[0];
       r = await p.enviarModelo({ telefone: w.meuNumero, modelo: m.meta.nome, idioma: m.meta.idioma || 'pt_BR', parametros: parametrosPara(m.corpo, { nome: primeiro }) });
-    } else r = tipo === 'modelo'
-      ? await p.enviarModelo({ telefone: w.meuNumero, modelo: 'hello_world', idioma: 'en_US' })
-      : await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
+    } else r = await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
     if (!r.ok) throw new Error(r.erro);
     return { para: formatarTelefone(w.meuNumero), id: r.id, waId: r.waId ? '+' + r.waId : '' };
   });

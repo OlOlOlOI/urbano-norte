@@ -745,10 +745,9 @@ async function secaoWhatsApp(raiz) {
   };
   raiz.append(h('h3', { class: 'rotulo' }, 'Testar no seu número'),
     h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega para quem mandou mensagem para o número da empresa, (64) 99905-1127, nas últimas 24 horas. A Meta aceita o envio, mas ele falha depois se a pessoa não escreveu antes. ',
-      'Se nunca mandou, comece pelo modelo "hello_world" (mensagem pronta da Meta, em inglês) ou mande um "oi" para o número da empresa.'),
+      'Se nunca mandou, mande um "oi" para o número da empresa antes. Para testar como quem nunca escreveu, use a mensagem aprovada pela Meta (botão de teste na tela da campanha).'),
     ...campo('Texto do teste', texto),
     h('div', { class: 'acoes' },
-      h('button', { type: 'button', class: 'btn', onclick: (ev) => enviarTeste('modelo', ev.target) }, 'Enviar modelo hello_world'),
       h('button', { type: 'button', class: 'btn principal', onclick: (ev) => enviarTeste('texto', ev.target) }, 'Enviar este texto')));
 }
 

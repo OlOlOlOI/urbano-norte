@@ -17,7 +17,8 @@ const GRAPH = 'https://graph.facebook.com/v27.0';
 const ERROS = {
   190: 'O token de acesso venceu ou é inválido. Gere um novo no painel da Meta e salve de novo.',
   131030: 'Este número ainda não está na lista de números autorizados do número de teste. Adicione-o no painel da Meta (campo "Para").',
-  131047: 'Passaram mais de 24 h desde a última mensagem desta pessoa para o número da empresa. Mande um "oi" do seu WhatsApp para o número da empresa e tente de novo, ou use o modelo hello_world.',
+  131047: 'Passaram mais de 24 h desde a última mensagem desta pessoa para o número da empresa. Mande um "oi" do seu WhatsApp para o número da empresa e tente de novo, ou use uma mensagem aprovada pela Meta.',
+  131058: 'O modelo hello_world da Meta só funciona no número de teste (+1). No número da empresa, use uma mensagem aprovada pela Meta.',
   131026: 'A mensagem não pôde ser entregue: confira se o número tem WhatsApp.',
   132001: 'O modelo (template) não existe ou não está aprovado neste idioma.',
   100: 'Algum dado está errado (confira o ID do número de telefone).',

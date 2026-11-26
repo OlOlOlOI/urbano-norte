@@ -25,7 +25,7 @@ Dentro da pasta `disparo/`: `npm install` e `npm test` (núcleo). `npm start` ab
 Em **Configurações → WhatsApp (API oficial da Meta)** cada computador cola o *ID do número de telefone* e o *token de acesso* do painel da Meta, mais o número de quem vai testar.
 O token fica cifrado só naquele computador (nunca vai para a pasta compartilhada). O app confere com a Meta antes de salvar.
 
-Teste no próprio número: texto livre, o modelo `hello_world` ou (no passo 3 da campanha) a mensagem aprovada.
+Teste no próprio número: texto livre ou (no passo 3 da campanha) a mensagem aprovada. O `hello_world` da Meta só funciona no número de teste (+1), não no número real (erro 131058).
 
 Envio real das campanhas:
 1. Escreva a mensagem (pode usar `{{nome|passageiro}}`; a Meta não aceita a variável no começo nem no fim do texto).
