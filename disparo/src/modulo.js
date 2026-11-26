@@ -16,7 +16,20 @@ const { executarCampanha } = require('./core/sender');
 const { adivinharColunas, colunasFaltando } = require('./core/columns');
 const { criarProvedorSimulacao } = require('./core/provider-sim');
 const { criarProvedorMeta } = require('./core/provider-meta');
-const { paraModeloMeta, nomeTecnico, mesmoTexto, situacao, CATEGORIAS } = require('./core/modelo-meta');
+const { paraModeloMeta, nomeTecnico, mesmoTexto, situacao, CATEGORIAS, validarExtras, assinaturaExtras, componentesModelo, componentesEnvio, TIPOS_IMAGEM, MAX_IMAGEM } = require('./core/modelo-meta');
+
+// ---------- imagens das mensagens (ficam na pasta compartilhada, em imagens/) ----------
+const EXT_IMAGEM = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' };
+function caminhoImagem(arquivo) {
+  const rel = String(arquivo || '');
+  if (!/^imagens\/[\w.-]+$/.test(rel)) throw new Error('Imagem inválida.');
+  return path.join(estado.pasta, rel);
+}
+function lerImagem(img) {
+  const p = caminhoImagem(img.arquivo);
+  if (!fs.existsSync(p)) throw new Error(`A imagem "${img.nome || img.arquivo}" não está mais na pasta compartilhada. Escolha a imagem de novo.`);
+  return fs.readFileSync(p);
+}
 
 // ---------- configuração local (por computador) ----------
 let pastaDados = () => app.getPath('userData');
@@ -90,6 +103,24 @@ let envioAtual = null;      // { sinal } enquanto uma campanha roda
 let vigia = null;           // timer que confere se a planilha mudou
 
 let operadorDaConta = () => null; // no app unificado, o nome vem do login (app/conta.js)
+let pedirServidor = null;          // no app unificado: chamada ao servidor do Atendimento com a conta logada
+
+/**
+ * Traz para a lista de descadastros quem clicou em "Não quero receber" numa campanha
+ * (o servidor do Atendimento recebe o clique pela Meta). Sem internet ou sem login, segue com a lista que tem.
+ */
+async function sincronizarDescadastros() {
+  if (!pedirServidor || !estado) return 0;
+  let r;
+  try { r = await pedirServidor('/api/descadastros'); } catch { return 0; }
+  const ja = estado.descadastrados();
+  let novos = 0;
+  for (const d of (r && r.descadastros) || []) {
+    const t = normalizarTelefone(d.wa_id);
+    if (t.ok && !ja.has(t.e164)) { estado.adicionarDescadastro(t.e164, 'Clicou em “Não quero receber” numa campanha'); ja.add(t.e164); novos++; }
+  }
+  return novos;
+}
 
 function abrirEstado() {
   const l = lerLocal();
@@ -182,6 +213,7 @@ function registrar(op = {}) {
   if (op.janela) janela = op.janela;
   if (op.conteudo) conteudo = op.conteudo;
   if (op.operador) operadorDaConta = op.operador;
+  if (op.pedir) pedirServidor = op.pedir;
   registrarIpc();
   abrirEstado();
   if (estado) { carregarPlanilha().catch(() => {}); iniciarVigia(); }
@@ -246,6 +278,25 @@ function registrarIpc() {
   h('planilha:salvarMapa', (mapa) => { estado.gravarConfig({ mapa }); return true; });
 
   h('modelos:salvar', (modelos) => { estado.gravarConfig({ modelos }); return true; });
+  h('modelos:escolherImagem', async () => {
+    if (!estado) throw new Error('Configure a pasta compartilhada primeiro.');
+    const r = await dialog.showOpenDialog(janela() || undefined, { title: 'Imagem da mensagem', properties: ['openFile'], filters: [{ name: 'Imagens (JPG ou PNG)', extensions: ['jpg', 'jpeg', 'png'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const origem = r.filePaths[0];
+    const tipo = EXT_IMAGEM[path.extname(origem).toLowerCase()];
+    if (!tipo || !TIPOS_IMAGEM.includes(tipo)) throw new Error('A imagem precisa ser JPG ou PNG.');
+    const bytes = fs.readFileSync(origem);
+    if (bytes.length > MAX_IMAGEM) throw new Error(`A imagem tem ${(bytes.length / 1024 / 1024).toFixed(1)} MB; o WhatsApp aceita até 5 MB.`);
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+    const arquivo = `imagens/${hash}${tipo === 'image/png' ? '.png' : '.jpg'}`;
+    fs.mkdirSync(path.join(estado.pasta, 'imagens'), { recursive: true });
+    if (!fs.existsSync(caminhoImagem(arquivo))) fs.writeFileSync(caminhoImagem(arquivo), bytes); // copia para a pasta: todos os computadores veem
+    return { imagem: { arquivo, nome: path.basename(origem), tipo, tamanho: bytes.length, hash }, dataUrl: `data:${tipo};base64,${bytes.toString('base64')}` };
+  });
+  h('modelos:imagem', (img) => {
+    if (!estado || !img) return null;
+    try { return `data:${img.tipo};base64,${lerImagem(img).toString('base64')}`; } catch { return null; }
+  });
   h('modelos:situacao', async () => ({ modelos: await atualizarSituacaoMeta(), categorias: CATEGORIAS }));
   h('modelos:enviarMeta', async ({ id, categoria }) => {
     if (!estado) throw new Error('Configure a pasta compartilhada primeiro.');
@@ -255,14 +306,23 @@ function registrarIpc() {
     if (!m) throw new Error('Mensagem não encontrada. Ela pode ter sido apagada em outro computador.');
     const conv = paraModeloMeta(m.corpo);
     if (!conv.ok) throw new Error(conv.erro);
+    const extras = validarExtras(m);
+    if (!extras.ok) throw new Error(extras.erro);
     const nome = nomeTecnico(m.nome);
-    const r = await provedorMeta().criarModelo(await contaWhats(), { nome, categoria, idioma: 'pt_BR', texto: conv.texto, exemplos: conv.exemplos });
+    const p = provedorMeta();
+    let handle;
+    if (m.imagem) {
+      const up = await p.subirImagemModelo({ bytes: lerImagem(m.imagem), tipo: m.imagem.tipo, nome: path.basename(m.imagem.arquivo) });
+      if (!up.ok) throw new Error(`Não consegui enviar a imagem para a Meta: ${up.erro}`);
+      handle = up.handle;
+    }
+    const r = await p.criarModelo(await contaWhats(), { nome, categoria, idioma: 'pt_BR', componentes: componentesModelo(m, conv, handle) });
     if (!r.ok) throw new Error(r.erro);
-    const meta = { nome, idioma: 'pt_BR', texto: conv.texto, corpoEnviado: m.corpo, categoria: r.categoria || categoria, status: r.status || 'PENDING', id: r.id, enviadoEm: new Date().toISOString(), por: estado.operador };
+    const meta = { nome, idioma: 'pt_BR', texto: conv.texto, corpoEnviado: m.corpo, extrasEnviados: assinaturaExtras(m), categoria: r.categoria || categoria, status: r.status || 'PENDING', id: r.id, enviadoEm: new Date().toISOString(), por: estado.operador };
     // relê antes de gravar: outro computador pode ter mexido na lista enquanto a Meta respondia
     const atuais = estado.lerConfig().modelos || [];
     estado.gravarConfig({ modelos: atuais.map((x) => (x.id === id ? { ...x, meta } : x)) });
-    return { meta, situacao: situacao(meta, m.corpo) };
+    return { meta, situacao: situacao(meta, m.corpo, assinaturaExtras(m)) };
   });
   h('ajustes:modoReal', async (ligar) => {
     if (ligar) {
@@ -273,7 +333,8 @@ function registrarIpc() {
     return { simulacao: !modoReal() };
   });
 
-  h('publico:calcular', ({ campanha }) => {
+  h('publico:calcular', async ({ campanha }) => {
+    await sincronizarDescadastros();
     const r = publico(campanha ? slug(campanha) : '', true);
     return { stats: r.stats, usouAceite: r.usouAceite, amostra: r.destinatarios.slice(0, 20).map((d) => ({ ...d, exibir: formatarTelefone(d.telefone) })), rejeitados: r.rejeitados.slice(0, 200) };
   });
@@ -283,19 +344,28 @@ function registrarIpc() {
   h('envio:iniciar', async ({ campanha, corpo, modeloId }) => {
     if (envioAtual) throw new Error('Já existe um envio em andamento.');
     if (!estado) throw new Error('Configure a pasta compartilhada primeiro.');
+    await sincronizarDescadastros(); // quem clicou em "Não quero receber" desde a última vez fica de fora
     const id = slug(campanha);
     if (!campanha.trim()) throw new Error('Dê um nome à campanha.');
     if (!String(corpo || '').trim()) throw new Error('Escreva a mensagem.');
     const real = modoReal();
     let modeloMeta = null;
+    let mensagem = null;
+    let imagemId;
     if (real) {
       const m = (estado.lerConfig().modelos || []).find((x) => x.id === modeloId);
       if (!m || m.corpo !== corpo) throw new Error('A mensagem mudou. Volte ao passo 1 e escolha de novo.');
-      const sit = situacao(m.meta, m.corpo);
+      const sit = situacao(m.meta, m.corpo, assinaturaExtras(m));
       if (sit.codigo !== 'aprovado') throw new Error(`Esta mensagem não pode ir no envio real: ${sit.texto.toLowerCase()}.`);
       modeloMeta = { nome: m.meta.nome, idioma: m.meta.idioma || 'pt_BR' };
+      mensagem = m;
     }
     const provedor = real ? provedorMeta() : criarProvedorSimulacao({ atrasoMs: 0 });
+    if (real && mensagem && mensagem.imagem) { // a imagem sobe uma vez só; cada pessoa recebe pelo id
+      const up = await provedor.subirMidia({ bytes: lerImagem(mensagem.imagem), tipo: mensagem.imagem.tipo, nome: path.basename(mensagem.imagem.arquivo) });
+      if (!up.ok) throw new Error(`Não consegui enviar a imagem para a Meta: ${up.erro}`);
+      imagemId = up.id;
+    }
     const { destinatarios } = publico(id, provedor.simulacao);
     if (!destinatarios.length) throw new Error('Não há destinatários aptos para esta campanha.');
     const cfg = estado.lerConfig();
@@ -303,7 +373,7 @@ function registrarIpc() {
     envioAtual = { sinal };
     // roda em segundo plano; o progresso volta por evento
     executarCampanha({
-      destinatarios, corpo, campanha: id, provedor, estado, sinal, modeloMeta,
+      destinatarios, corpo, campanha: id, provedor, estado, sinal, modeloMeta, mensagem, imagemId,
       limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: provedor.simulacao ? 40 : (cfg.intervaloMs ?? 1000),
       aoProgredir: (p) => avisar('envio:progresso', p),
     }).then((resumo) => avisar('envio:fim', resumo))
@@ -313,7 +383,10 @@ function registrarIpc() {
   });
   h('envio:cancelar', () => { if (envioAtual) envioAtual.sinal.cancelado = true; return true; });
 
-  h('descadastros:listar', () => estado.listaDescadastros().map((d) => ({ ...d, exibir: formatarTelefone(d.telefone) })));
+  h('descadastros:listar', async () => {
+    await sincronizarDescadastros();
+    return estado.listaDescadastros().map((d) => ({ ...d, exibir: formatarTelefone(d.telefone) }));
+  });
   h('descadastros:adicionar', (texto) => {
     const numeros = String(texto || '').split(/[\n;,]+/).map((s) => s.trim()).filter(Boolean);
     let ok = 0; const invalidos = [];
@@ -361,10 +434,15 @@ function registrarIpc() {
     if (tipo === 'modeloDisparo') {
       // a mensagem aprovada, como a planilha vai receber, com o primeiro nome de quem está testando
       const m = ((estado && estado.lerConfig().modelos) || []).find((x) => x.id === modeloId);
-      if (!m || situacao(m.meta, m.corpo).codigo !== 'aprovado') throw new Error('Esta mensagem ainda não foi aprovada pela Meta.');
-      const { parametrosPara } = require('./core/modelo-meta');
+      if (!m || situacao(m.meta, m.corpo, assinaturaExtras(m)).codigo !== 'aprovado') throw new Error('Esta mensagem ainda não foi aprovada pela Meta.');
       const primeiro = String((estado && estado.operador) || '').split(' ')[0];
-      r = await p.enviarModelo({ telefone: w.meuNumero, modelo: m.meta.nome, idioma: m.meta.idioma || 'pt_BR', parametros: parametrosPara(m.corpo, { nome: primeiro }) });
+      let imagemId;
+      if (m.imagem) {
+        const up = await p.subirMidia({ bytes: lerImagem(m.imagem), tipo: m.imagem.tipo, nome: path.basename(m.imagem.arquivo) });
+        if (!up.ok) throw new Error(`Não consegui enviar a imagem para a Meta: ${up.erro}`);
+        imagemId = up.id;
+      }
+      r = await p.enviarModelo({ telefone: w.meuNumero, modelo: m.meta.nome, idioma: m.meta.idioma || 'pt_BR', componentes: componentesEnvio(m, { nome: primeiro }, imagemId) });
     } else r = await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
     if (!r.ok) throw new Error(r.erro);
     return { para: formatarTelefone(w.meuNumero), id: r.id, waId: r.waId ? '+' + r.waId : '' };

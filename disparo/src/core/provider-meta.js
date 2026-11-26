@@ -68,6 +68,18 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
     return { ok: true, dados: json };
   }
 
+  /** Chamada com corpo bruto (arquivos). */
+  async function chamarBruto(url, { headers, corpo }) {
+    let r;
+    try { r = await buscar(url, { method: 'POST', headers, body: corpo }); } catch (e) {
+      return { ok: false, erro: 'Sem conexão com a Meta. Confira a internet. (' + (e && e.message || e) + ')' };
+    }
+    let json = null;
+    try { json = await r.json(); } catch { /* sem JSON */ }
+    if (!r.ok || (json && json.error)) return { ok: false, erro: explicarErro(json, r.status), codigo: json && json.error && json.error.code };
+    return { ok: true, dados: json };
+  }
+
   const postar = (para, conteudo) => chamar(`${numeroId}/messages`, {
     metodo: 'POST',
     corpo: { messaging_product: 'whatsapp', recipient_type: 'individual', to: para, ...conteudo },
@@ -95,12 +107,45 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
     /** Texto livre (só chega dentro da janela de 24 h). */
     enviar: ({ telefone, texto }) => mensagem(telefone, { type: 'text', text: { preview_url: false, body: String(texto || '') } }),
 
-    /** Modelo aprovado pela Meta (ex.: hello_world, idioma en_US). `parametros` preenche {{1}}, {{2}}... do corpo. */
-    enviarModelo: ({ telefone, modelo, idioma = 'pt_BR', parametros = [] }) =>
-      mensagem(telefone, { type: 'template', template: {
-        name: modelo, language: { code: idioma },
-        ...(parametros.length ? { components: [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: String(t) })) }] } : {}),
-      } }),
+    /**
+     * Modelo aprovado pela Meta. `parametros` preenche {{1}}, {{2}}... do corpo; `componentes` (de modelo-meta.js
+     * componentesEnvio) manda tudo de uma vez: imagem do topo, texto e botões.
+     */
+    enviarModelo: ({ telefone, modelo, idioma = 'pt_BR', parametros = [], componentes }) => {
+      const comps = componentes || (parametros.length ? [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: String(t) })) }] : []);
+      return mensagem(telefone, { type: 'template', template: { name: modelo, language: { code: idioma }, ...(comps.length ? { components: comps } : {}) } });
+    },
+
+    /**
+     * Sobe a imagem da mensagem para a Meta poder enviá-la (o id vale 30 dias). Uma vez por campanha.
+     * @param {{bytes: Buffer, tipo: string, nome?: string}} arq
+     */
+    async subirMidia({ bytes, tipo, nome = 'imagem' }) {
+      const form = new FormData();
+      form.append('messaging_product', 'whatsapp');
+      form.append('type', tipo);
+      form.append('file', new Blob([bytes], { type: tipo }), nome);
+      const r = await chamarBruto(`${GRAPH}/${numeroId}/media`, { headers: { Authorization: `Bearer ${token}` }, corpo: form });
+      if (!r.ok) return r;
+      return { ok: true, id: r.dados.id };
+    },
+
+    /**
+     * Sobe a imagem de EXEMPLO para o pedido de aprovação do modelo (upload "retomável" da Meta, pelo app da Meta).
+     * Devolve o "header_handle" que vai no componente HEADER.
+     */
+    async subirImagemModelo({ bytes, tipo, nome = 'imagem' }) {
+      const d = await chamar(`debug_token?input_token=${encodeURIComponent(token)}`);
+      const appId = d.ok && d.dados && d.dados.data && d.dados.data.app_id;
+      if (!appId) return { ok: false, erro: d.ok ? 'Não achei o app da Meta deste token para enviar a imagem.' : d.erro };
+      const sessao = await chamarBruto(`${GRAPH}/${appId}/uploads?file_name=${encodeURIComponent(nome)}&file_length=${bytes.length}&file_type=${encodeURIComponent(tipo)}`,
+        { headers: { Authorization: `Bearer ${token}` } });
+      if (!sessao.ok) return sessao;
+      const envio = await chamarBruto(`${GRAPH}/${sessao.dados.id}`, { headers: { Authorization: `OAuth ${token}`, file_offset: '0' }, corpo: bytes });
+      if (!envio.ok) return envio;
+      if (!envio.dados || !envio.dados.h) return { ok: false, erro: 'A Meta não devolveu a imagem enviada. Tente de novo.' };
+      return { ok: true, handle: envio.dados.h };
+    },
 
     /**
      * Descobre a conta do WhatsApp Business (WABA) dona deste número, pelas permissões do próprio token.
@@ -140,10 +185,13 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
       return { ok: true, modelos: (r.dados.data || []).map((m) => ({ nome: m.name, status: m.status, categoria: m.category, idioma: m.language, motivo: m.rejected_reason })) };
     },
 
-    /** Envia um modelo novo para aprovação. `texto` já no formato da Meta ({{1}}), `exemplos` um por variável. */
-    async criarModelo(conta, { nome, categoria, idioma = 'pt_BR', texto, exemplos = [] }) {
-      const corpo = { type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) };
-      const r = await chamar(`${conta}/message_templates`, { metodo: 'POST', corpo: { name: nome, category: categoria, language: idioma, components: [corpo] } });
+    /**
+     * Envia um modelo novo para aprovação. Ou `componentes` prontos (modelo-meta.js componentesModelo),
+     * ou só `texto` já no formato da Meta ({{1}}) e `exemplos` um por variável.
+     */
+    async criarModelo(conta, { nome, categoria, idioma = 'pt_BR', texto, exemplos = [], componentes }) {
+      const comps = componentes || [{ type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) }];
+      const r = await chamar(`${conta}/message_templates`, { metodo: 'POST', corpo: { name: nome, category: categoria, language: idioma, components: comps } });
       if (!r.ok) return r;
       return { ok: true, id: r.dados.id, status: r.dados.status, categoria: r.dados.category };
     },

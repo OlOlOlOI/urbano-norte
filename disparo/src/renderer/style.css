@@ -221,3 +221,37 @@ details[open] > summary::before { transform: rotate(90deg); }
 .selo-meta.analise, .selo-meta.mudou { background: var(--aviso-fundo); color: var(--aviso-texto); border-color: var(--aviso-texto); }
 .selo-meta.recusado, .selo-meta.pausado { background: var(--erro-fundo); color: var(--erro-texto); border-color: var(--erro-texto); }
 .botoes-opcao { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- editor de mensagem com imagem, formatação e botões ---------- */
+dialog.largo { max-width: min(66rem, 96vw); }
+.editor-colunas { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.editor-previa { position: sticky; top: 0; }
+@media (max-width: 860px) { .editor-colunas { grid-template-columns: 1fr; } .editor-previa { position: static; } }
+.barra-formatar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.ferramenta { font: inherit; font-size: 14px; min-width: 38px; height: 34px; padding: 0 10px; border: 1px solid #c9cfca; border-radius: 8px; background: #fff; color: var(--tinta); cursor: pointer; }
+.ferramenta:hover { border-color: #8c948f; }
+.ferramenta:focus-visible { outline: 2px solid var(--verde, #007a43); outline-offset: 2px; }
+.ferramenta.negrito { font-weight: 800; }
+.ferramenta.italico { font-style: italic; font-family: Georgia, serif; }
+.ferramenta.riscado { text-decoration: line-through; }
+.area-imagem { margin: 6px 0 4px; }
+.imagem-escolhida { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.imagem-escolhida img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #d8ddd9; }
+.botoes-msg { border: 1px solid #d8ddd9; border-radius: 10px; padding: 8px 14px 12px; margin-top: 14px; }
+.botoes-msg .marcar { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+.linha-site { display: grid; grid-template-columns: 1fr 1.6fr; gap: 12px; }
+
+/* prévia: conversa do WhatsApp */
+.previa-whats { background: #efeae2; border-radius: 12px; padding: 16px; min-height: 120px; }
+.whats { max-width: 22rem; }
+.whats .balao { background: #fff; border: 0; border-radius: 4px 10px 10px 10px; padding: 4px; white-space: normal; max-width: none; box-shadow: 0 1px 1px rgba(0, 0, 0, .12); color: #111b21; }
+.balao-img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: 7px; }
+.balao-texto { padding: 6px 7px 4px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.balao-texto .linha { white-space: pre-wrap; min-height: 1.4em; }
+.balao-texto blockquote { margin: 3px 0; padding: 1px 0 1px 9px; border-left: 4px solid #c3c6c8; color: #3b4a54; }
+.balao-texto ul, .balao-texto ol { margin: 3px 0; padding-left: 22px; }
+.balao-texto code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: #f0f2f5; border-radius: 4px; padding: 0 3px; }
+.balao-texto code.bloco { display: block; white-space: pre-wrap; padding: 6px; }
+.balao-rodape { padding: 0 7px 5px; font-size: 13px; color: #667781; }
+.balao-botoes { display: grid; gap: 2px; margin-top: 2px; }
+.balao-botoes span { background: #fff; border-radius: 8px; text-align: center; padding: 9px; color: #027eb5; font-weight: 600; font-size: 14px; box-shadow: 0 1px 1px rgba(0, 0, 0, .12); }

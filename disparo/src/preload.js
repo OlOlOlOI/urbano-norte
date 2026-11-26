@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('api', {
     estado: chamar('planilha:estado'), escolherArquivo: chamar('planilha:escolherArquivo'), definirUrl: chamar('planilha:definirUrl'),
     recarregar: chamar('planilha:recarregar'), salvarMapa: chamar('planilha:salvarMapa'),
   },
-  modelos: { salvar: chamar('modelos:salvar'), situacao: chamar('modelos:situacao'), enviarMeta: chamar('modelos:enviarMeta') },
+  modelos: { salvar: chamar('modelos:salvar'), situacao: chamar('modelos:situacao'), enviarMeta: chamar('modelos:enviarMeta'), escolherImagem: chamar('modelos:escolherImagem'), imagem: chamar('modelos:imagem') },
   publico: { calcular: chamar('publico:calcular') },
   envio: { previa: chamar('envio:previa'), iniciar: chamar('envio:iniciar'), cancelar: chamar('envio:cancelar') },
   descadastros: { listar: chamar('descadastros:listar'), adicionar: chamar('descadastros:adicionar'), remover: chamar('descadastros:remover') },

@@ -172,6 +172,7 @@ app.whenReady().then(() => {
   const nomeDaConta = () => { const s = conta.sessao(); return s ? s.usuario.nome : null; };
   disparo.registrar({
     operador: nomeDaConta,
+    pedir: (caminho, op) => conta.pedir(caminho, op),
     pastaDados: () => pastaModulo('disparo'),
     janela: janelaViva,
     conteudo: () => (telas.disparo && !telas.disparo.webContents.isDestroyed() ? telas.disparo.webContents : null),

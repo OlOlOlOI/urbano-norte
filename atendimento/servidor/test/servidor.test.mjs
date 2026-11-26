@@ -541,3 +541,26 @@ test('sessão vencida (30 dias sem uso) pede login de novo', async () => {
   assert.strictEqual(r.status, 401);
   assert.match((await r.json()).erro, /Entre de novo/);
 });
+
+test('botão "Não quero receber" da campanha: descadastra, confirma para a pessoa e aparece para o Disparo', async () => {
+  const env = ambiente();
+  const clique = mensagemCliente('wamid.SAIR1', '');
+  clique.entry[0].changes[0].value.messages[0] = { id: 'wamid.SAIR1', from: '556492937604', timestamp: String(Math.floor(Date.now() / 1000)), type: 'button', button: { payload: 'SAIR_UN', text: 'Não quero receber' } };
+  const meta = metaFalsa();
+  try {
+    await webhook(env, clique);
+    await webhook(env, clique); // a Meta pode reenviar: não duplica
+  } finally { meta.restaurar(); }
+  const lista = await (await api(env, '/api/descadastros')).json();
+  assert.deepStrictEqual(lista.descadastros.map((d) => [d.wa_id, d.origem]), [['556492937604', 'botao']]);
+  const resposta = meta.chamadas.filter((c) => c.url.includes('/messages'));
+  assert.strictEqual(resposta.length, 1);
+  assert.match(resposta[0].corpo.text.body, /não vai mais receber/);
+  const msgs = await (await api(env, '/api/conversas/556492937604/mensagens')).json();
+  assert.deepStrictEqual(msgs.mensagens.map((m) => [m.direcao, m.texto.slice(0, 17), m.operador]), [['entrada', 'Não quero receber', null], ['saida', 'Pronto! Você não ', 'Automático']]);
+  // outro botão qualquer não descadastra
+  const outro = mensagemCliente('wamid.B2', '', { de: '556299990000' });
+  outro.entry[0].changes[0].value.messages[0] = { id: 'wamid.B2', from: '556299990000', timestamp: String(Math.floor(Date.now() / 1000)), type: 'button', button: { payload: 'OUTRO', text: 'Quero saber mais' } };
+  await webhook(env, outro);
+  assert.strictEqual((await (await api(env, '/api/descadastros')).json()).descadastros.length, 1);
+});

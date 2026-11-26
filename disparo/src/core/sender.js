@@ -1,7 +1,7 @@
 'use strict';
 
 const { renderizar } = require('./template');
-const { parametrosPara } = require('./modelo-meta');
+const { componentesEnvio } = require('./modelo-meta');
 
 /**
  * Executa uma campanha, um destinatário por vez.
@@ -12,6 +12,8 @@ const { parametrosPara } = require('./modelo-meta');
  * @param {Array}  p.destinatarios  [{ telefone, nome }]
  * @param {string} p.corpo          texto do modelo, com {{nome}}
  * @param {{nome: string, idioma: string}} [p.modeloMeta] modelo aprovado pela Meta: envia por ele (obrigatório para quem não escreveu nas últimas 24 h)
+ * @param {object} [p.mensagem]     a mensagem do Disparo (imagem, rodapé, botões), para montar o envio do modelo
+ * @param {string} [p.imagemId]     id da imagem já enviada para a Meta (se a mensagem tem imagem)
  * @param {string} p.campanha       identificador da campanha
  * @param {object} p.provedor       ver provider-sim.js
  * @param {Estado} p.estado
@@ -37,7 +39,8 @@ async function executarCampanha(p) {
     let res;
     try {
       res = p.modeloMeta
-        ? await provedor.enviarModelo({ telefone: d.telefone, modelo: p.modeloMeta.nome, idioma: p.modeloMeta.idioma || 'pt_BR', parametros: parametrosPara(corpo, { nome: d.nome }), campanha })
+        ? await provedor.enviarModelo({ telefone: d.telefone, modelo: p.modeloMeta.nome, idioma: p.modeloMeta.idioma || 'pt_BR',
+          componentes: componentesEnvio({ ...(p.mensagem || {}), corpo }, { nome: d.nome }, p.imagemId), campanha })
         : await provedor.enviar({ telefone: d.telefone, texto: renderizar(corpo, { nome: d.nome }), campanha });
     } catch (e) {
       res = { ok: false, erro: String(e && e.message || e) };

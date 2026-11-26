@@ -111,6 +111,7 @@ function abrirDialogo(montar) {
   return new Promise((resolve) => {
     const d = $('#dialogo');
     vazio(d);
+    d.classList.remove('largo');
     let resultado;
     const fechar = (v) => { resultado = v; d.close(); };
     d.addEventListener('close', () => resolve(resultado), { once: true });
@@ -133,13 +134,69 @@ async function previa(corpo, nome = 'Maria') {
   return r.ok ? r.dados : '';
 }
 
+/* ---------- prévia como no WhatsApp ---------- */
+// Formatação do WhatsApp: *negrito*, _itálico_, ~riscado~, `código`, ```bloco```, "> " citação, "- " lista, "1. " lista numerada.
+const RE_INLINE = /(```[\s\S]+?```|`[^`\n]+`|\*[^\s*](?:[^*\n]*[^\s*])?\*|_[^\s_](?:[^_\n]*[^\s_])?_|~[^\s~](?:[^~\n]*[^\s~])?~)/;
+function inlineWhats(texto) {
+  const frag = document.createDocumentFragment();
+  for (const parte of String(texto).split(RE_INLINE)) {
+    if (!parte) continue;
+    if (parte.startsWith('```') && parte.length > 6) { frag.append(h('code', { class: 'bloco' }, parte.slice(3, -3))); continue; }
+    const marca = { '`': 'code', '*': 'strong', _: 'em', '~': 's' }[parte[0]];
+    if (marca && parte.length > 2 && parte.endsWith(parte[0]) && RE_INLINE.test(parte) && parte.match(RE_INLINE)[0] === parte) {
+      const el = h(marca, {});
+      el.append(marca === 'code' ? parte.slice(1, -1) : inlineWhats(parte.slice(1, -1)));
+      frag.append(el);
+    } else frag.append(parte);
+  }
+  return frag;
+}
+function formatarWhats(texto) {
+  const frag = document.createDocumentFragment();
+  const linhas = String(texto || '').split('\n');
+  for (let i = 0; i < linhas.length;) {
+    const l = linhas[i];
+    const bloco = (re, montar) => { const itens = []; while (i < linhas.length && re.test(linhas[i])) itens.push(linhas[i++].replace(re, '')); frag.append(montar(itens)); };
+    if (/^> ?/.test(l)) bloco(/^> ?/, (it) => { const q = h('blockquote', {}); it.forEach((t, k) => { if (k) q.append(h('br', {})); q.append(inlineWhats(t)); }); return q; });
+    else if (/^[-*] /.test(l)) bloco(/^[-*] /, (it) => h('ul', {}, it.map((t) => { const li = h('li', {}); li.append(inlineWhats(t)); return li; })));
+    else if (/^\d+\. /.test(l)) bloco(/^\d+\. /, (it) => h('ol', {}, it.map((t) => { const li = h('li', {}); li.append(inlineWhats(t)); return li; })));
+    else { const p = h('div', { class: 'linha' }); p.append(l ? inlineWhats(l) : '\u00a0'); frag.append(p); i++; }
+  }
+  return frag;
+}
+/* Balão completo: imagem no topo, texto formatado, rodapé cinza e botões embaixo. */
+function balaoWhats({ texto, imagemUrl, rodape, botoes }) {
+  const site = botoes && botoes.site && (botoes.site.texto || botoes.site.url) ? botoes.site : null;
+  const lista = [site ? `↗ ${site.texto || 'Abrir link'}` : null, botoes && botoes.sair ? '↩ Não quero receber' : null].filter(Boolean);
+  const corpo = h('div', { class: 'balao-texto' });
+  corpo.append(formatarWhats(texto));
+  return h('div', { class: 'whats' },
+    h('div', { class: 'balao' },
+      imagemUrl ? h('img', { class: 'balao-img', src: imagemUrl, alt: 'Imagem da mensagem' }) : null,
+      corpo,
+      rodape && rodape.trim() ? h('div', { class: 'balao-rodape' }, rodape.trim()) : null),
+    lista.length ? h('div', { class: 'balao-botoes' }, lista.map((b) => h('span', {}, b))) : null);
+}
+/* Prévia de uma mensagem salva, com o nome de exemplo. */
+async function balaoDe(m, nome = 'Maria') {
+  const [texto, imagemUrl] = await Promise.all([previa(m.corpo, nome), m.imagem ? window.api.modelos.imagem(m.imagem).then((r) => (r && r.ok ? r.dados : null)) : null]);
+  return balaoWhats({ texto, imagemUrl, rodape: m.rodape, botoes: m.botoes });
+}
+
 /* ---------- aprovação na Meta (modelos) ---------- */
 const reais = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-// mesma regra de core/modelo-meta.js#situacao, resumida para a tela
+// mesma regra de core/modelo-meta.js#situacao e #assinaturaExtras, resumida para a tela
+function assinaturaExtras(m) {
+  const rodape = String((m && m.rodape) || '').replace(/\s+/g, ' ').trim();
+  const s = m && m.botoes && m.botoes.site;
+  const site = s && (s.texto || s.url) ? { texto: String(s.texto || '').trim(), url: String(s.url || '').trim() } : null;
+  return JSON.stringify({ img: (m && m.imagem && m.imagem.hash) || null, rodape, site, sair: Boolean(m && m.botoes && m.botoes.sair) });
+}
 function situacaoMeta(m) {
   const meta = m && m.meta;
   if (!meta || !meta.nome) return { codigo: 'sem', texto: 'Não enviada para aprovação' };
   if (meta.corpoEnviado !== undefined && meta.corpoEnviado !== m.corpo) return { codigo: 'mudou', texto: 'Texto mudou: aprovar de novo' };
+  if (assinaturaExtras(m) !== (meta.extrasEnviados ?? assinaturaExtras({}))) return { codigo: 'mudou', texto: 'Imagem, rodapé ou botões mudaram: aprovar de novo' };
   const st = String(meta.status || '').toUpperCase();
   if (st === 'APPROVED') return { codigo: 'aprovado', texto: 'Aprovada pela Meta' };
   if (st === 'REJECTED') return { codigo: 'recusado', texto: 'Recusada pela Meta' + (meta.motivo && meta.motivo !== 'NONE' ? ` (${meta.motivo})` : '') };
@@ -188,38 +245,93 @@ function pedirAprovacao(m) {
 function editarMensagem(modelo) {
   const novo = !modelo;
   return abrirDialogo((d, fechar) => {
+    d.classList.add('largo');
     const nome = h('input', { type: 'text', value: modelo ? modelo.nome : '', autocomplete: 'off' });
-    const texto = h('textarea', {}, modelo ? modelo.corpo : '');
-    const balao = h('div', { class: 'balao', 'aria-live': 'polite' });
+    const texto = h('textarea', { rows: '10' }, modelo ? modelo.corpo : '');
+    const rodape = h('input', { type: 'text', value: (modelo && modelo.rodape) || '', maxlength: '60', autocomplete: 'off', placeholder: 'Ex.: Urbano Norte · Feito na nossa cidade' });
+    const site = (modelo && modelo.botoes && modelo.botoes.site) || {};
+    const temSite = h('input', { type: 'checkbox', checked: Boolean(site.url) });
+    const siteTexto = h('input', { type: 'text', value: site.texto || 'Baixar o app', maxlength: '25', autocomplete: 'off' });
+    const siteUrl = h('input', { type: 'url', value: site.url || '', placeholder: 'https://', autocomplete: 'off', spellcheck: 'false' });
+    const sair = h('input', { type: 'checkbox', checked: modelo ? Boolean(modelo.botoes && modelo.botoes.sair) : true });
+    const caixaPrevia = h('div', { class: 'previa-whats', 'aria-live': 'polite' });
     const erro = h('div', { class: 'caixa erro oculto', role: 'alert' });
+    let imagem = (modelo && modelo.imagem) || null;
+    let imagemUrl = null;
     let confirmandoExcluir = false;
 
+    const botoes = () => ({ site: temSite.checked ? { texto: siteTexto.value.trim(), url: siteUrl.value.trim() } : null, sair: sair.checked });
     let t;
-    const atualizar = () => { clearTimeout(t); t = setTimeout(async () => { balao.textContent = await previa(texto.value); }, 150); };
-    texto.addEventListener('input', atualizar);
-    atualizar();
-
-    const inserir = () => {
-      const marca = '{{nome|passageiro}}';
-      const ini = texto.selectionStart ?? texto.value.length;
-      const fim = texto.selectionEnd ?? ini;
-      texto.value = texto.value.slice(0, ini) + marca + texto.value.slice(fim);
-      texto.focus();
-      texto.setSelectionRange(ini + marca.length, ini + marca.length);
-      atualizar();
+    const atualizar = () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        const txt = await previa(texto.value);
+        vazio(caixaPrevia).append(balaoWhats({ texto: txt, imagemUrl, rodape: rodape.value, botoes: botoes() }));
+      }, 150);
     };
+    for (const el of [texto, rodape, siteTexto, siteUrl]) el.addEventListener('input', atualizar);
+    for (const el of [temSite, sair]) el.addEventListener('change', () => { linhaSite.classList.toggle('oculto', !temSite.checked); atualizar(); });
+
+    // ---------- barra de formatação ----------
+    const envolver = (marca) => {
+      const ini = texto.selectionStart; const fim = texto.selectionEnd;
+      const sel = texto.value.slice(ini, fim) || 'texto';
+      texto.setRangeText(marca + sel + marca, ini, fim, 'end');
+      if (ini === fim) texto.setSelectionRange(ini + marca.length, ini + marca.length + sel.length);
+      texto.focus(); atualizar();
+    };
+    const prefixar = (fn) => { // aplica em cada linha selecionada (citação, lista)
+      const v = texto.value;
+      const ini = v.lastIndexOf('\n', texto.selectionStart - 1) + 1;
+      let fim = v.indexOf('\n', texto.selectionEnd); if (fim < 0) fim = v.length;
+      const linhas = v.slice(ini, fim).split('\n').map((l, i) => fn(l, i));
+      texto.setRangeText(linhas.join('\n'), ini, fim, 'select');
+      texto.focus(); atualizar();
+    };
+    const inserirNome = () => { const marca = '{{nome|passageiro}}'; texto.setRangeText(marca, texto.selectionStart, texto.selectionEnd, 'end'); texto.focus(); atualizar(); };
+    const ferramenta = (rotulo, titulo, acao, classe = '') => h('button', { type: 'button', class: 'ferramenta ' + classe, title: titulo, 'aria-label': titulo, onclick: acao }, rotulo);
+    const barra = h('div', { class: 'barra-formatar', role: 'toolbar', 'aria-label': 'Formatação' },
+      ferramenta('B', 'Negrito (*texto*)', () => envolver('*'), 'negrito'),
+      ferramenta('I', 'Itálico (_texto_)', () => envolver('_'), 'italico'),
+      ferramenta('S', 'Riscado (~texto~)', () => envolver('~'), 'riscado'),
+      ferramenta('❝ Citação', 'Citação: barrinha do lado (> no começo da linha)', () => prefixar((l) => (l.startsWith('> ') ? l.slice(2) : l ? '> ' + l : l))),
+      ferramenta('• Lista', 'Lista com marcadores (- no começo da linha)', () => prefixar((l) => (l.startsWith('- ') ? l.slice(2) : l ? '- ' + l : l))),
+      ferramenta('1. Lista', 'Lista numerada', () => prefixar((l, i) => (/^\d+\. /.test(l) ? l.replace(/^\d+\. /, '') : l ? `${i + 1}. ${l}` : l))),
+      ferramenta('+ Nome da pessoa', 'Inserir o nome da pessoa', inserirNome));
+
+    // ---------- imagem ----------
+    const areaImagem = h('div', { class: 'area-imagem' });
+    const desenharImagem = () => {
+      vazio(areaImagem).append(imagem
+        ? h('div', { class: 'imagem-escolhida' },
+          imagemUrl ? h('img', { src: imagemUrl, alt: '' }) : null,
+          h('span', {}, imagem.nome, h('span', { class: 'pequeno' }, ` · ${(imagem.tamanho / 1024).toFixed(0)} KB`)),
+          h('button', { type: 'button', class: 'btn', onclick: escolherImagem }, 'Trocar'),
+          h('button', { type: 'button', class: 'btn discreto', onclick: () => { imagem = null; imagemUrl = null; desenharImagem(); atualizar(); } }, 'Tirar imagem'))
+        : h('button', { type: 'button', class: 'btn', onclick: escolherImagem }, '🖼 Escolher imagem (JPG ou PNG, até 5 MB)'));
+    };
+    async function escolherImagem() {
+      const r = await chamar(window.api.modelos.escolherImagem());
+      if (!r) return;
+      imagem = r.imagem; imagemUrl = r.dataUrl;
+      desenharImagem(); atualizar();
+    }
+    if (imagem) window.api.modelos.imagem(imagem).then((r) => { if (r && r.ok && r.dados) { imagemUrl = r.dados; desenharImagem(); atualizar(); } });
+    desenharImagem();
+
+    const linhaSite = h('div', { class: 'linha-site' + (temSite.checked ? '' : ' oculto') },
+      h('div', {}, ...campo('Texto do botão', siteTexto, 'até 25 letras')), h('div', {}, ...campo('Link', siteUrl, 'começa com https://')));
 
     const salvar = async () => {
-      if (!nome.value.trim() || !texto.value.trim()) {
-        erro.textContent = !nome.value.trim() ? 'Dê um nome à mensagem para reconhecê-la depois.' : 'Escreva o texto da mensagem.';
-        erro.classList.remove('oculto');
-        (!nome.value.trim() ? nome : texto).focus();
-        return;
-      }
+      const falta = !nome.value.trim() ? ['Dê um nome à mensagem para reconhecê-la depois.', nome] : !texto.value.trim() ? ['Escreva o texto da mensagem.', texto]
+        : temSite.checked && !/^https:\/\/\S+$/.test(siteUrl.value.trim()) ? ['O link do botão precisa começar com https://', siteUrl]
+          : temSite.checked && !siteTexto.value.trim() ? ['Escreva o texto do botão do link.', siteTexto] : null;
+      if (falta) { erro.textContent = falta[0]; erro.classList.remove('oculto'); falta[1].focus(); return; }
+      const dados = { nome: nome.value.trim(), corpo: texto.value, imagem, rodape: rodape.value.trim(), botoes: botoes() };
       const lista = S.modelos.map((m) => ({ ...m }));
       let id;
-      if (novo) { id = String(Date.now()); lista.push({ id, nome: nome.value.trim(), corpo: texto.value }); }
-      else { id = modelo.id; const m = lista.find((x) => x.id === id); m.nome = nome.value.trim(); m.corpo = texto.value; }
+      if (novo) { id = String(Date.now()); lista.push({ id, ...dados }); }
+      else { id = modelo.id; Object.assign(lista.find((x) => x.id === id), dados); }
       if (await chamar(window.api.modelos.salvar(lista))) { S.modelos = lista; fechar(id); }
     };
 
@@ -232,16 +344,23 @@ function editarMensagem(modelo) {
     d.append(
       h('h2', { id: 'dialogo-titulo' }, novo ? 'Nova mensagem' : 'Editar mensagem'),
       erro,
-      ...campo('Nome da mensagem', nome, 'Serve só para você reconhecer a mensagem depois.'),
-      ...campo('Texto da mensagem', texto),
-      h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: inserir }, 'Inserir o nome da pessoa')),
-      h('p', { class: 'pequeno' }, 'Quando a planilha não trouxer o nome, o texto usa “passageiro”.'),
-      h('p', { class: 'rotulo' }, 'Como a Maria vai ver'), balao,
-      h('p', { class: 'pequeno' }, 'Para o envio real, depois de salvar, mande a mensagem para aprovação da Meta. Se mudar o texto de uma mensagem aprovada, ela precisa ser aprovada de novo.'),
+      h('div', { class: 'editor-colunas' },
+        h('div', { class: 'editor-campos' },
+          ...campo('Nome da mensagem', nome, 'Serve só para você reconhecer a mensagem depois.'),
+          h('p', { class: 'rotulo' }, 'Imagem no topo (opcional)'), areaImagem,
+          ...(() => { const [rot, ctl] = campo('Texto da mensagem', texto, 'Selecione um trecho e use os botões. Quando a planilha não trouxer o nome, o texto usa “passageiro”.'); return [rot, barra, ctl]; })(),
+          ...campo('Rodapé (opcional)', rodape, 'Texto pequeno e cinza embaixo, até 60 letras.'),
+          h('fieldset', { class: 'botoes-msg' }, h('legend', {}, 'Botões embaixo da mensagem'),
+            h('label', { class: 'marcar' }, sair, ' “Não quero receber” — quem clica sai da lista de envios sozinho (recomendado: menos bloqueios e denúncias)'),
+            h('label', { class: 'marcar' }, temSite, ' Botão com link (ex.: baixar o app, site, Instagram)'),
+            linhaSite)),
+        h('div', { class: 'editor-previa' }, h('p', { class: 'rotulo' }, 'Como a Maria vai ver'), caixaPrevia,
+          h('p', { class: 'pequeno' }, 'Para o envio real, depois de salvar, mande a mensagem para aprovação da Meta. Mudou o texto, a imagem, o rodapé ou os botões de uma mensagem aprovada: ela precisa ser aprovada de novo.'))),
       h('div', { class: 'acoes' },
         h('button', { type: 'button', class: 'btn', onclick: () => fechar(undefined) }, 'Cancelar'),
         !novo && h('button', { type: 'button', class: 'btn perigo', onclick: excluir }, 'Excluir'),
         h('button', { type: 'button', class: 'btn principal vai', onclick: salvar }, 'Salvar mensagem')));
+    atualizar();
   });
 }
 
@@ -379,7 +498,7 @@ async function passo1Mensagem(raiz) {
       radio.addEventListener('change', () => { S.camp.modeloId = m.id; S.camp.nome = ''; });
       const trecho = previas[i].length > 160 ? previas[i].slice(0, 160) + '…' : previas[i];
       return h('div', { class: 'opcao' }, radio,
-        h('label', { for: id, class: 'conteudo' }, h('span', { class: 'titulo' }, m.nome), h('span', { class: 'trecho' }, trecho), temWhats ? seloMeta(m) : null),
+        h('label', { for: id, class: 'conteudo' }, h('span', { class: 'titulo' }, m.nome), h('span', { class: 'trecho' }, m.imagem ? '🖼 ' : '', trecho), temWhats ? seloMeta(m) : null),
         h('div', { class: 'botoes-opcao' },
           temWhats && ['sem', 'mudou', 'recusado'].includes(situacaoMeta(m).codigo)
             ? h('button', { type: 'button', class: 'btn', 'aria-label': `Enviar a mensagem ${m.nome} para aprovação da Meta`, onclick: async () => { const r = await pedirAprovacao(m); if (r) { await ir('campanha'); avisoOk(`“${m.nome}” foi para a Meta. ${r.situacao.texto}.`); } } }, 'Aprovar na Meta')
@@ -451,8 +570,8 @@ async function passo3Enviar(raiz, modelo) {
   nome.addEventListener('input', () => { S.camp.nome = nome.value; });
   const confirma = h('input', { type: 'checkbox', id: 'confirma-autorizacao', checked: S.camp.autorizou });
   confirma.addEventListener('change', () => { S.camp.autorizou = confirma.checked; });
-  const balao = h('div', { class: 'balao' });
-  previa(modelo.corpo).then((t) => { balao.textContent = t; });
+  const balao = h('div', { class: 'previa-whats' });
+  balaoDe(modelo).then((b) => balao.append(b));
 
   const sm = situacaoMeta(modelo);
   const custo = !teste && modelo.meta && S.categorias && S.categorias[modelo.meta.categoria] ? S.categorias[modelo.meta.categoria].custo * n : null;

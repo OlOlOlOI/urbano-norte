@@ -61,3 +61,10 @@ CREATE TABLE IF NOT EXISTS sessoes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes (usuario_id);
+
+-- Quem clicou em "Não quero receber" numa campanha do Disparo.
+CREATE TABLE IF NOT EXISTS descadastros (
+  wa_id TEXT PRIMARY KEY,            -- número do WhatsApp (só dígitos, como a Meta manda)
+  criado_em INTEGER NOT NULL,
+  origem TEXT                        -- ex.: botao
+);

@@ -93,7 +93,7 @@ export function lerMensagemMeta(m) {
       break;
     }
     case 'contacts': texto = (m.contacts || []).map((c) => [c.name && c.name.formatted_name, ...(c.phones || []).map((p) => p.phone)].filter(Boolean).join(' ')).join('\n'); break;
-    case 'button': texto = (m.button && m.button.text) ?? null; break;
+    case 'button': texto = (m.button && m.button.text) ?? null; break; // botão de resposta rápida de um modelo (ex.: "Não quero receber")
     case 'interactive': {
       const i = m.interactive || {};
       texto = (i.button_reply && i.button_reply.title) || (i.list_reply && i.list_reply.title) || null;
@@ -102,8 +102,14 @@ export function lerMensagemMeta(m) {
     case 'reaction': texto = m.reaction && m.reaction.emoji ? `Reagiu com ${m.reaction.emoji}` : null; break;
     default: texto = null;
   }
-  return { id: m.id, waId: m.from, tipo, texto, midia, quando: Number(m.timestamp) * 1000 || agora() };
+  const botao = tipo === 'button' && m.button ? m.button.payload || null : null;
+  return { id: m.id, waId: m.from, tipo, texto, midia, botao, quando: Number(m.timestamp) * 1000 || agora() };
 }
+
+// Botão "Não quero receber" das campanhas do Disparo (disparo/src/core/modelo-meta.js: PAYLOAD_SAIR).
+const PAYLOAD_SAIR = 'SAIR_UN';
+const RESPOSTA_SAIR = 'Pronto! Você não vai mais receber as nossas mensagens de campanha. Se precisar falar com a Urbano Norte, é só escrever aqui. 💚';
+export const pediuParaSair = (msg) => msg.tipo === 'button' && (msg.botao === PAYLOAD_SAIR || /^\s*n[ãa]o quero receber\s*$/i.test(msg.texto || ''));
 
 // ---------- banco ----------
 async function salvarEntrada(db, msg, nome, { canal = 'whatsapp', usuario = null } = {}) {
@@ -291,12 +297,21 @@ export async function processarWebhook(db, corpo, env) {
       const nomes = new Map((v.contacts || []).map((c) => [c.wa_id, c.profile && c.profile.name]));
       for (const m of v.messages || []) {
         const msg = lerMensagemMeta(m);
-        if (msg.id && msg.waId && await salvarEntrada(db, msg, nomes.get(msg.waId))) novas++;
+        if (msg.id && msg.waId && await salvarEntrada(db, msg, nomes.get(msg.waId))) {
+          novas++;
+          if (pediuParaSair(msg)) await descadastrar(db, env, msg.waId);
+        }
       }
       for (const s of v.statuses || []) await atualizarStatus(db, s);
     }
   }
   return novas;
+}
+
+/** Guarda o descadastro (o Disparo busca antes de cada campanha) e confirma para a pessoa. */
+async function descadastrar(db, env, waId) {
+  await db.prepare('INSERT INTO descadastros (wa_id, criado_em, origem) VALUES (?, ?, ?) ON CONFLICT(wa_id) DO NOTHING').bind(waId, agora(), 'botao').run();
+  try { await enviarTexto(env, db, waId, RESPOSTA_SAIR, 'Automático'); } catch (e) { console.error('[descadastro] resposta', e); }
 }
 
 // ---------- Meta (Graph API) ----------
@@ -488,6 +503,12 @@ async function rotaAtendimento(request, env, caminho, conta) {
     }
     // ok: o diagnóstico rodou; tudoCerto: todos os itens passaram (o app mostra cada item com ✓ ou ✗)
     return json({ ok: true, tudoCerto: passos.every((p) => p.ok), passos });
+  }
+
+  // quem pediu para não receber campanhas (botão "Não quero receber"): o Disparo junta à lista dele
+  if (request.method === 'GET' && caminho === '/api/descadastros') {
+    const { results } = await db.prepare('SELECT wa_id, criado_em, origem FROM descadastros ORDER BY criado_em').all();
+    return json({ ok: true, descadastros: results });
   }
 
   if (request.method === 'GET' && caminho === '/api/conversas') {

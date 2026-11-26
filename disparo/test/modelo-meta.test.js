@@ -83,5 +83,42 @@ test('campanha com modelo aprovado envia pelo modelo, com o nome de cada pessoa'
     corpo: 'Olá, {{nome|passageiro}}! Até logo.', campanha: 'c', provedor, estado, modeloMeta: { nome: 'un_c_1', idioma: 'pt_BR' },
   });
   assert.strictEqual(r.enviados, 2);
-  assert.deepStrictEqual(envios.map((e) => [e.modelo, e.parametros[0]]), [['un_c_1', 'Ana'], ['un_c_1', 'passageiro']]);
+  assert.deepStrictEqual(envios.map((e) => [e.modelo, e.componentes[0].parameters[0].text]), [['un_c_1', 'Ana'], ['un_c_1', 'passageiro']]);
+});
+
+test('campanha com imagem, rodapé e botões: imagem no topo e o botão de sair com o código de descadastro', async () => {
+  const envios = [];
+  const provedor = { simulacao: false, enviar: async () => ({ ok: false }), enviarModelo: async (x) => { envios.push(x); return { ok: true }; } };
+  const mensagem = { corpo: 'Oi, {{nome}}! Novidade.', imagem: { tipo: 'image/jpeg', tamanho: 10, hash: 'h1' }, rodape: 'Urbano Norte', botoes: { site: { texto: 'Baixar o app', url: 'https://exemplo.com' }, sair: true } };
+  await executarCampanha({
+    destinatarios: [{ telefone: '+5564999990001', nome: 'Ana' }], corpo: mensagem.corpo, campanha: 'c', provedor,
+    estado: { enviadosHoje: () => 0, registrarEnvio: () => {} }, modeloMeta: { nome: 'un_c_2' }, mensagem, imagemId: 'MID1',
+  });
+  assert.deepStrictEqual(envios[0].componentes, [
+    { type: 'header', parameters: [{ type: 'image', image: { id: 'MID1' } }] },
+    { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+    { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'SAIR_UN' }] },
+  ]);
+});
+
+test('extras: regras da Meta para imagem, rodapé e botões', () => {
+  const { validarExtras } = require('../src/core/modelo-meta');
+  assert.strictEqual(validarExtras({ imagem: { tipo: 'image/gif', tamanho: 1 } }).ok, false);
+  assert.strictEqual(validarExtras({ imagem: { tipo: 'image/png', tamanho: 6 * 1024 * 1024 } }).ok, false);
+  assert.match(validarExtras({ rodape: 'x'.repeat(61) }).erro, /60/);
+  assert.match(validarExtras({ rodape: 'Oi {{nome}}' }).erro, /rodapé/);
+  assert.match(validarExtras({ botoes: { site: { texto: 'Abrir', url: 'http://inseguro.com' } } }).erro, /https/);
+  assert.match(validarExtras({ botoes: { site: { texto: 'x'.repeat(26), url: 'https://a.com' } } }).erro, /25/);
+  assert.strictEqual(validarExtras({ rodape: 'Urbano Norte', botoes: { site: { texto: 'Baixar', url: 'https://a.com' }, sair: true } }).ok, true);
+});
+
+test('mudar imagem, rodapé ou botões depois de aprovada pede nova aprovação', () => {
+  const { situacao, assinaturaExtras } = require('../src/core/modelo-meta');
+  const m = { corpo: 'Oi! Tudo bem?', rodape: 'Urbano Norte' };
+  const meta = { nome: 'un_x', status: 'APPROVED', corpoEnviado: m.corpo, extrasEnviados: assinaturaExtras(m) };
+  assert.strictEqual(situacao(meta, m.corpo, assinaturaExtras(m)).codigo, 'aprovado');
+  assert.strictEqual(situacao(meta, m.corpo, assinaturaExtras({ ...m, rodape: 'Outro' })).codigo, 'mudou');
+  assert.strictEqual(situacao(meta, m.corpo, assinaturaExtras({ ...m, imagem: { hash: 'h' } })).codigo, 'mudou');
+  // modelo antigo (sem extras guardados) continua aprovado se a mensagem não tem extras
+  assert.strictEqual(situacao({ nome: 'un_y', status: 'APPROVED', corpoEnviado: 'A b' }, 'A b', assinaturaExtras({})).codigo, 'aprovado');
 });

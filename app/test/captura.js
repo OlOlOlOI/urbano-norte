@@ -84,6 +84,25 @@ app.whenReady().then(async () => {
     const temWhats = await t.disparo.webContents.executeJavaScript("typeof window.api.whatsapp.salvar === 'function' && !!document.querySelector('input[type=password]')");
     conferir('disparo: seção WhatsApp nas Configurações', temWhats);
     await capturar('2b-disparo-whatsapp');
+    // editor de mensagem: formatação, citação, rodapé, botões e prévia igual ao WhatsApp
+    t.disparo.webContents.executeJavaScript(`editarMensagem({ id: 'x', nome: 'Comércio local', rodape: 'Urbano Norte · Feito na nossa cidade',
+      botoes: { site: { texto: 'Baixar o app', url: 'https://urbanonorte.com.br' }, sair: true },
+      corpo: '*A crise apertou. A solução é local.*\\n\\n> A crise apertou, o comércio sentiu, muita porta fechou.\\n\\n> Mas a solução não vem de fora. Vem daqui.\\n\\nOlá, {{nome|passageiro}}! Com a Urbano Norte:\\n- o dinheiro fica na cidade\\n- gera emprego aqui\\n\\n_Impulsione o comércio local._' })`);
+    await espera(900);
+    const previaEd = await t.disparo.webContents.executeJavaScript(`(() => { const b = document.querySelector('#dialogo .previa-whats');
+      return { citacoes: b.querySelectorAll('blockquote').length, negrito: (b.querySelector('strong') || {}).textContent, lista: b.querySelectorAll('ul li').length,
+        italico: (b.querySelector('em') || {}).textContent, rodape: (b.querySelector('.balao-rodape') || {}).textContent, botoes: [...b.querySelectorAll('.balao-botoes span')].map((x) => x.textContent),
+        nome: b.textContent.includes('Olá, Maria!'), barra: document.querySelectorAll('#dialogo .ferramenta').length }; })()`);
+    conferir('disparo: prévia formata negrito, itálico, citação e lista', previaEd.citacoes === 2 && previaEd.negrito === 'A crise apertou. A solução é local.' && previaEd.lista === 2 && previaEd.italico === 'Impulsione o comércio local.' && previaEd.nome, JSON.stringify(previaEd));
+    conferir('disparo: prévia mostra rodapé e botões', previaEd.rodape === 'Urbano Norte · Feito na nossa cidade' && previaEd.botoes.join('|') === '↗ Baixar o app|↩ Não quero receber' && previaEd.barra === 7, JSON.stringify(previaEd.botoes));
+    // botão Citação: transforma as linhas selecionadas
+    const citou = await t.disparo.webContents.executeJavaScript(`(() => { const ta = document.querySelector('#dialogo textarea'); ta.value = 'linha um\\nlinha dois'; ta.setSelectionRange(0, ta.value.length);
+      [...document.querySelectorAll('#dialogo .ferramenta')].find((b) => /Citação/.test(b.textContent)).click(); return ta.value; })()`);
+    conferir('disparo: botão Citação põe "> " em cada linha', citou === '> linha um\n> linha dois', JSON.stringify(citou));
+    await t.disparo.webContents.executeJavaScript(`(() => { const ta = document.querySelector('#dialogo textarea'); ta.value = '*A crise apertou. A solução é local.*\\n\\n> A crise apertou, o comércio sentiu, muita porta fechou.\\n\\n> Mas a solução não vem de fora. Vem daqui.\\n\\nOlá, {{nome|passageiro}}! Com a Urbano Norte:\\n- o dinheiro fica na cidade\\n- gera emprego aqui\\n\\n_Impulsione o comércio local._'; ta.dispatchEvent(new Event('input')); })()`);
+    await espera(500);
+    await capturar('2c-disparo-editor');
+    await t.disparo.webContents.executeJavaScript("document.getElementById('dialogo').close()");
     principal.mostrarAba('sorteio');
     await espera(400);
 

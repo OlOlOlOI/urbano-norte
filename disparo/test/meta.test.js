@@ -71,3 +71,35 @@ test('celular do Brasil: se a Meta recusar como não autorizado, tenta de novo s
   assert.deepStrictEqual(enviados, ['5564992937605', '556492937605']);
   assert.strictEqual(r.ok, true);
 });
+
+test('imagem do modelo: upload retomável pelo app da Meta devolve o header_handle', async () => {
+  const chamadas = [];
+  const respostas = [{ data: { app_id: '777' } }, { id: 'upload:ABC' }, { h: 'HANDLE-1' }];
+  const f = async (url, op) => { chamadas.push({ url, op }); return { ok: true, status: 200, json: async () => respostas.shift() }; };
+  const p = criarProvedorMeta({ numeroId: '1', token: 'TK', fetch: f });
+  const r = await p.subirImagemModelo({ bytes: Buffer.from('12345'), tipo: 'image/png', nome: 'arte.png' });
+  assert.deepStrictEqual(r, { ok: true, handle: 'HANDLE-1' });
+  assert.match(chamadas[1].url, /\/777\/uploads\?file_name=arte\.png&file_length=5&file_type=image%2Fpng$/);
+  assert.strictEqual(chamadas[2].url, `${GRAPH}/upload:ABC`);
+  assert.strictEqual(chamadas[2].op.headers.Authorization, 'OAuth TK');
+  assert.strictEqual(chamadas[2].op.headers.file_offset, '0');
+});
+
+test('imagem do envio: sobe como mídia do número e devolve o id', async () => {
+  const chamadas = [];
+  const f = async (url, op) => { chamadas.push({ url, op }); return { ok: true, status: 200, json: async () => ({ id: 'MEDIA-9' }) }; };
+  const p = criarProvedorMeta({ numeroId: '55', token: 'TK', fetch: f });
+  const r = await p.subirMidia({ bytes: Buffer.from('x'), tipo: 'image/jpeg', nome: 'a.jpg' });
+  assert.deepStrictEqual(r, { ok: true, id: 'MEDIA-9' });
+  assert.strictEqual(chamadas[0].url, `${GRAPH}/55/media`);
+  assert.ok(chamadas[0].op.body instanceof FormData);
+  assert.strictEqual(chamadas[0].op.body.get('messaging_product'), 'whatsapp');
+});
+
+test('criar modelo com componentes prontos manda todos eles', async () => {
+  const f = fetchFalso({ id: 'T1', status: 'PENDING', category: 'MARKETING' });
+  const p = criarProvedorMeta({ numeroId: '1', token: 'TK', fetch: f });
+  const componentes = [{ type: 'HEADER', format: 'IMAGE', example: { header_handle: ['H'] } }, { type: 'BODY', text: 'Oi' }, { type: 'FOOTER', text: 'UN' }];
+  await p.criarModelo('WABA', { nome: 'un_a', categoria: 'MARKETING', componentes });
+  assert.deepStrictEqual(f.chamadas[0].corpo.components, componentes);
+});

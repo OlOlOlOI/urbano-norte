@@ -32,7 +32,15 @@ Envio real das campanhas:
 2. No passo 1 da campanha, **Aprovar na Meta** e escolha o tipo: promoção (~R$ 0,32 por mensagem entregue) ou aviso de serviço (~R$ 0,035). O Disparo cria o modelo na conta do WhatsApp sozinho.
 3. Espere aparecer **Aprovada pela Meta** (↻ Ver se já foi aprovada).
 4. Em Configurações, **Ligar o envio real** (vale só neste computador). No envio, o Disparo mostra o custo estimado e pede para digitar a quantidade de mensagens.
-Mudou o texto de uma mensagem aprovada? Ela precisa ser aprovada de novo.
+Mudou o texto, a imagem, o rodapé ou os botões de uma mensagem aprovada? Ela precisa ser aprovada de novo.
+
+Montar a mensagem (editor, com prévia igual ao WhatsApp):
+- **Imagem no topo** (JPG ou PNG até 5 MB): é copiada para `imagens/` na pasta compartilhada. Vai para a Meta junto no pedido de aprovação (upload retomável pelo app da Meta) e, no envio, sobe uma vez por campanha como mídia do número.
+- **Formatação** do WhatsApp: `*negrito*`, `_itálico_`, `~riscado~`, `> citação` (a barrinha do lado), `- lista`, `1. lista`.
+- **Rodapé** (até 60 letras) e **botões**: link (texto até 25 letras, https) e **"Não quero receber"**.
+  Quem clica no "Não quero receber" é descadastrado pelo servidor do Atendimento (tabela `descadastros`, resposta automática de confirmação);
+  no app unificado, o Disparo busca essa lista antes de calcular o público e antes de cada envio.
+- Ainda não testado com a Meta de verdade: se a citação/lista é mantida dentro de um modelo aprovado.
 
 O provedor real está em `src/core/provider-meta.js` (Graph API v27.0). Falta para ligar as campanhas:
 - modelos (templates) aprovados pela Meta — fora da janela de 24 h o WhatsApp só aceita modelos;

@@ -63,6 +63,89 @@ function nomeTecnico(nome, agora = Date.now()) {
   return `un_${base}_${agora.toString(36)}`;
 }
 
+// ---------- imagem, rodapé e botões ----------
+// No Disparo: m.imagem = { arquivo, nome, tipo, tamanho, hash } (arquivo dentro da pasta compartilhada),
+// m.rodape = texto curto cinza embaixo, m.botoes = { site: { texto, url } | null, sair: boolean }.
+const TEXTO_SAIR = 'Não quero receber';
+const PAYLOAD_SAIR = 'SAIR_UN'; // volta no webhook quando a pessoa clica: o servidor descadastra
+const TIPOS_IMAGEM = ['image/jpeg', 'image/png'];
+const MAX_IMAGEM = 5 * 1024 * 1024;
+
+const rodapeDe = (m) => String((m && m.rodape) || '').replace(/\s+/g, ' ').trim();
+const siteDe = (m) => { const s = m && m.botoes && m.botoes.site; return s && (s.texto || s.url) ? { texto: String(s.texto || '').trim(), url: String(s.url || '').trim() } : null; };
+const sairDe = (m) => Boolean(m && m.botoes && m.botoes.sair);
+
+/** Confere imagem, rodapé e botões nas regras da Meta. */
+function validarExtras(m) {
+  if (m && m.imagem) {
+    if (!TIPOS_IMAGEM.includes(m.imagem.tipo)) return { ok: false, erro: 'A imagem precisa ser JPG ou PNG.' };
+    if (m.imagem.tamanho > MAX_IMAGEM) return { ok: false, erro: 'A imagem passa de 5 MB. Diminua o tamanho e escolha de novo.' };
+  }
+  const rodape = rodapeDe(m);
+  if (rodape.length > 60) return { ok: false, erro: `O rodapé aceita até 60 caracteres; este tem ${rodape.length}.` };
+  if (/\{\{/.test(rodape)) return { ok: false, erro: 'O rodapé não aceita o nome da pessoa ({{nome}}).' };
+  const site = siteDe(m);
+  if (site) {
+    if (!site.texto) return { ok: false, erro: 'Escreva o texto do botão do link (ex.: Baixar o app).' };
+    if (site.texto.length > 25) return { ok: false, erro: 'O texto do botão aceita até 25 caracteres.' };
+    let u; try { u = new URL(site.url); } catch { u = null; }
+    if (!u || u.protocol !== 'https:') return { ok: false, erro: 'O link do botão precisa começar com https://' };
+    if (site.url.length > 2000) return { ok: false, erro: 'O link do botão é longo demais.' };
+  }
+  return { ok: true };
+}
+
+/** Resumo do que vai junto com o texto: se mudar depois de aprovada, precisa aprovar de novo. */
+function assinaturaExtras(m) {
+  return JSON.stringify({ img: (m && m.imagem && m.imagem.hash) || null, rodape: rodapeDe(m), site: siteDe(m), sair: sairDe(m) });
+}
+const SEM_EXTRAS = assinaturaExtras({});
+
+/** Botões na ordem em que vão para a Meta (o índice importa no envio). */
+function botoesMeta(m) {
+  const lista = [];
+  const site = siteDe(m);
+  if (site) lista.push({ type: 'URL', text: site.texto, url: site.url });
+  if (sairDe(m)) lista.push({ type: 'QUICK_REPLY', text: TEXTO_SAIR });
+  return lista;
+}
+
+/**
+ * Componentes do modelo para criar na Meta.
+ * @param {object} m mensagem do Disparo
+ * @param {{texto: string, exemplos: string[]}} conv resultado de paraModeloMeta(m.corpo)
+ * @param {string} [handleImagem] "header_handle" da imagem (upload na Meta), obrigatório se houver imagem
+ */
+function componentesModelo(m, conv, handleImagem) {
+  const c = [];
+  if (m.imagem) c.push({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [handleImagem] } });
+  c.push({ type: 'BODY', text: conv.texto, ...(conv.exemplos.length ? { example: { body_text: [conv.exemplos] } } : {}) });
+  if (rodapeDe(m)) c.push({ type: 'FOOTER', text: rodapeDe(m) });
+  const b = botoesMeta(m);
+  if (b.length) c.push({ type: 'BUTTONS', buttons: b });
+  return c;
+}
+
+/**
+ * Componentes de um ENVIO (por pessoa): imagem do topo, valores do texto e o "payload" do botão de sair.
+ * @param {object} m mensagem do Disparo
+ * @param {object} vars { nome }
+ * @param {string} [imagemId] id da imagem já enviada para a Meta (uma vez por campanha)
+ */
+function componentesEnvio(m, vars, imagemId) {
+  const c = [];
+  if (m.imagem) {
+    if (!imagemId) throw new Error('A imagem da mensagem não foi enviada para a Meta.');
+    c.push({ type: 'header', parameters: [{ type: 'image', image: { id: imagemId } }] });
+  }
+  const params = parametrosPara(m.corpo, vars);
+  if (params.length) c.push({ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) });
+  botoesMeta(m).forEach((b, i) => {
+    if (b.type === 'QUICK_REPLY') c.push({ type: 'button', sub_type: 'quick_reply', index: String(i), parameters: [{ type: 'payload', payload: PAYLOAD_SAIR }] });
+  });
+  return c;
+}
+
 /** O texto salvo ainda é o mesmo que foi para a Meta? (se editou depois, precisa aprovar de novo) */
 function mesmoTexto(corpo, meta) {
   if (!meta || !meta.texto) return false;
@@ -71,9 +154,10 @@ function mesmoTexto(corpo, meta) {
 }
 
 /** Situação do modelo em português, para a tela. */
-function situacao(meta, corpo) {
+function situacao(meta, corpo, extras) {
   if (!meta || !meta.nome) return { codigo: 'sem', texto: 'Ainda não enviada para aprovação da Meta' };
   if (corpo !== undefined && (meta.corpoEnviado !== undefined ? meta.corpoEnviado !== corpo : !mesmoTexto(corpo, meta))) return { codigo: 'mudou', texto: 'O texto mudou depois de ir para a Meta: envie para aprovação de novo' };
+  if (extras !== undefined && extras !== (meta.extrasEnviados ?? SEM_EXTRAS)) return { codigo: 'mudou', texto: 'A imagem, o rodapé ou os botões mudaram depois de ir para a Meta: envie para aprovação de novo' };
   const s = String(meta.status || '').toUpperCase();
   if (s === 'APPROVED') return { codigo: 'aprovado', texto: 'Aprovada pela Meta' };
   if (s === 'PENDING' || s === 'IN_APPEAL') return { codigo: 'analise', texto: 'Em análise pela Meta (costuma levar de minutos a algumas horas)' };
@@ -82,4 +166,7 @@ function situacao(meta, corpo) {
   return { codigo: 'analise', texto: `Situação na Meta: ${s || 'desconhecida'}` };
 }
 
-module.exports = { paraModeloMeta, parametrosPara, nomeTecnico, mesmoTexto, situacao, CATEGORIAS };
+module.exports = {
+  paraModeloMeta, parametrosPara, nomeTecnico, mesmoTexto, situacao, CATEGORIAS,
+  validarExtras, assinaturaExtras, botoesMeta, componentesModelo, componentesEnvio, TEXTO_SAIR, PAYLOAD_SAIR, TIPOS_IMAGEM, MAX_IMAGEM,
+};
