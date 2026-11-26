@@ -296,8 +296,7 @@ test('Instagram: áudio, foto, menção no Story e resposta ao Story', async () 
   assert.strictEqual(por['ig.mid.A'].tipo, 'audio');
   assert.strictEqual(por['ig.mid.A'].midia_url, 'https://cdn.exemplo/audio.mp4');
   assert.strictEqual(por['ig.mid.F'].tipo, 'image');
-  assert.strictEqual(por['ig.mid.S'].texto, 'Mencionou vocês no Story');
-  assert.strictEqual(por['ig.mid.S'].midia_url, 'https://cdn.exemplo/story');
+  assert.strictEqual(por['ig.mid.S'], undefined, 'menção no Story não entra no Atendimento');
   assert.strictEqual(por['ig.mid.R'].texto, '↩ Respondeu ao seu Story: Que legal!');
   // o app baixa o áudio pelo servidor (link direto do Instagram)
   const original = globalThis.fetch;
@@ -394,4 +393,11 @@ test('Instagram: perfil (nome e @) é buscado com o token da Página', async () 
   assert.strictEqual(c.nome, 'Rayan');
   assert.strictEqual(c.usuario, '_rayanluiz.kk');
   assert.strictEqual(chamadas.find((x) => x.url.includes('fields=name,username')).auth, 'Bearer TOK_PAG');
+});
+
+test('Instagram: conversa feita só de menção no Story nem aparece', async () => {
+  const env = ambiente();
+  await webhook(env, dmInstagram([dm('777', 'ig.mid.SO', { attachments: [{ type: 'story_mention', payload: { url: 'https://cdn.exemplo/s' } }] })]));
+  const c = (await (await api(env, '/api/conversas')).json()).conversas;
+  assert.strictEqual(c.length, 0);
 });

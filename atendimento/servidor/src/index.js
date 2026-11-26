@@ -184,6 +184,8 @@ async function processarInstagram(db, corpo, env) {
       }
       if (!ev.message || !ev.message.mid || ev.message.is_deleted) continue;
       const msg = lerMensagemInstagram(ev, contato);
+      // menções em Stories não entram no Atendimento (decisão da empresa: só mensagens de verdade)
+      if (msg.tipo === 'story_mention') continue;
       if (eco) {
         // mensagem mandada pelo app do Instagram no celular (as do Atendimento já estão gravadas)
         const ja = await db.prepare('SELECT id FROM mensagens WHERE id = ?').bind(msg.id).first();

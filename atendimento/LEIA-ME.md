@@ -8,7 +8,7 @@ Aba **Atendimento** do app unificado: as conversas do **WhatsApp** e as **mensag
 ## O que já faz (versão 1)
 - Lista de conversas (abertas / resolvidas / todas), busca por nome ou número, contador de não lidas na aba e no ícone do app, aviso do sistema quando chega mensagem com o app em segundo plano.
 - WhatsApp e Instagram na mesma lista, com selo do canal (WA/IG) e filtro Todos / WhatsApp / Instagram; no Instagram aparece o @.
-- Conversa com texto, fotos e áudios (aparecem e tocam na tela), vídeo/documento (abrem no programa do computador), localização, contatos, respostas e menções em Stories (Instagram).
+- Conversa com texto, fotos e áudios (aparecem e tocam na tela), vídeo/documento (abrem no programa do computador), localização, contatos e respostas a Stories (Instagram). Menções em Stories são ignoradas de propósito.
 - Responder com texto; mostra quem respondeu e se foi enviada / entregue / lida / não entregue (com o motivo).
 - Marca como lida no celular do cliente (dois tiques azuis) ao abrir a conversa.
 - Indica a janela de 24 h do WhatsApp e bloqueia texto livre quando ela fecha.
