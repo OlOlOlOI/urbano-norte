@@ -67,7 +67,8 @@ nav button.config { margin-left: 8px; }
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
 .modo .selo { background: var(--verde); color: var(--tinta); font-weight: 700; padding: 1px 10px; border-radius: 99px; }
-.modo.real { background: var(--erro-texto); }
+.modo.real { background: #007a43; } /* verde-escuro da marca: envio real ligado é o normal, não um erro */
+.modo.real .selo { background: #fff; color: #007a43; }
 
 /* ---------- conteúdo ---------- */
 main { flex: 1; overflow: auto; padding: 32px; outline: none; }
