@@ -40,10 +40,13 @@ function formatarNumero(waId) {
   return d ? '+' + d : '';
 }
 const ehIg = (c) => Boolean(c) && (c.canal === 'instagram' || String(c.wa_id || '').startsWith('ig_'));
-const nomeDe = (c) => (c && (c.nome || (ehIg(c) ? (c.usuario ? '@' + c.usuario : 'Instagram') : formatarNumero(c.wa_id)))) || '';
-const identificacao = (c) => (ehIg(c) ? `Instagram${c.usuario ? ' · @' + c.usuario : ''}` : `WhatsApp · ${formatarNumero(c.wa_id)}`);
+// Nome do perfil só vale se tiver letra ou número (tem gente que usa "-", "." ou emoji como nome no WhatsApp).
+const nomeReal = (c) => { const n = String((c && c.nome) || '').trim(); return /[\p{L}\p{N}]/u.test(n) ? n : ''; };
+const nomeDe = (c) => (c && (nomeReal(c) || (ehIg(c) ? (c.usuario ? '@' + c.usuario : 'Instagram') : formatarNumero(c.wa_id)))) || '';
+const identificacao = (c) => (ehIg(c) ? `Instagram${c.usuario ? ' · @' + c.usuario : ''}`
+  : nomeReal(c) ? `WhatsApp · ${formatarNumero(c.wa_id)}` : 'WhatsApp · sem nome no perfil');
 const selo = (c) => h('span', { class: 'canal ' + (ehIg(c) ? 'ig' : 'wa'), title: ehIg(c) ? 'Instagram' : 'WhatsApp', 'aria-label': ehIg(c) ? 'Instagram' : 'WhatsApp' }, ehIg(c) ? 'IG' : 'WA');
-const inicial = (c) => (nomeDe(c).replace(/[^A-Za-zÀ-ÿ0-9]/g, '')[0] || '?').toUpperCase();
+const inicial = (c) => ((nomeReal(c) || (ehIg(c) ? c.usuario || '' : '')).replace(/[^\p{L}\p{N}]/gu, '')[0] || '?').toUpperCase();
 const hora = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 function quando(ms) {
   const d = new Date(ms); const hoje = new Date();
