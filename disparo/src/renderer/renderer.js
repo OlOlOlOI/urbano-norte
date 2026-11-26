@@ -726,20 +726,61 @@ async function telaSair(raiz) {
    Histórico
    ===================================================================== */
 async function telaHistorico(raiz) {
+  raiz.append(h('h1', {}, 'Histórico'));
+  // abas: o que já foi enviado / mensagens que ainda dependem da Meta
+  const pendentes = S.modelos.filter((m) => situacaoMeta(m).codigo !== 'aprovado');
+  const aba = S.abaHistorico === 'pendentes' ? 'pendentes' : 'envios';
+  const botaoAba = (id, rotulo) => h('button', { type: 'button', role: 'tab', id: `aba-${id}`, 'aria-selected': String(aba === id), 'aria-controls': 'painel-historico',
+    onclick: async () => { S.abaHistorico = id; await ir('historico'); } }, rotulo);
+  raiz.append(h('div', { class: 'abas', role: 'tablist', 'aria-label': 'Histórico' },
+    botaoAba('envios', 'Envios'), botaoAba('pendentes', `Pendentes na Meta${pendentes.length ? ` (${pendentes.length})` : ''}`)));
+  const painel = h('div', { id: 'painel-historico', role: 'tabpanel', 'aria-labelledby': `aba-${aba}` });
+  raiz.append(painel);
+  if (aba === 'pendentes') return painelPendentes(painel);
+
   const r = await chamar(window.api.historico.ler());
-  raiz.append(h('h1', {}, 'Histórico de envios'), h('p', { class: 'apoio' }, 'Tudo o que foi enviado, por qualquer usuário.'));
+  painel.append(h('p', { class: 'apoio' }, 'Tudo o que foi enviado, por qualquer usuário.'));
   if (!r) return;
-  if (!r.resumo.length) { raiz.append(h('p', {}, 'Nenhum envio ainda. Quando você enviar a primeira campanha, ela aparece aqui.')); return; }
-  raiz.append(h('div', { class: 'tabela' }, h('table', {}, h('caption', { class: 'so-leitor' }, 'Campanhas enviadas'),
+  if (!r.resumo.length) { painel.append(h('p', {}, 'Nenhum envio ainda. Quando você enviar a primeira campanha, ela aparece aqui.')); return; }
+  painel.append(h('div', { class: 'tabela' }, h('table', {}, h('caption', { class: 'so-leitor' }, 'Campanhas enviadas'),
     h('thead', {}, h('tr', {}, ['Campanha', 'Tipo', 'Enviadas', 'Falhas', 'Quem enviou', 'Último envio'].map((x) => h('th', { scope: 'col' }, x)))),
     h('tbody', {}, r.resumo.map((c) => h('tr', {}, h('td', {}, c.campanha),
       h('td', {}, h('span', { class: 'etiqueta' + (c.simulacao ? ' teste' : '') }, c.simulacao ? 'Teste' : 'Real')),
       h('td', {}, c.enviados), h('td', {}, c.falhas), h('td', {}, c.operadores.join(', ')), h('td', {}, dataBR(c.ultimo))))))));
-  raiz.append(h('details', {}, h('summary', {}, `Ver os últimos ${r.recentes.length} envios, um por um`),
+  painel.append(h('details', {}, h('summary', {}, `Ver os últimos ${r.recentes.length} envios, um por um`),
     h('div', { class: 'tabela' }, h('table', {}, h('caption', { class: 'so-leitor' }, 'Últimos envios'),
       h('thead', {}, h('tr', {}, ['Quando', 'Campanha', 'Telefone', 'Resultado', 'Quem enviou'].map((x) => h('th', { scope: 'col' }, x)))),
       h('tbody', {}, r.recentes.map((e) => h('tr', {}, h('td', {}, dataBR(e.t)), h('td', {}, e.campanha), h('td', {}, e.exibir),
         h('td', {}, e.status === 'enviado' ? 'Enviado' : `Falhou${e.erro ? `: ${e.erro}` : ''}`), h('td', {}, e.operador))))))));
+}
+
+/* Mensagens que ainda dependem da Meta: em análise, recusadas, mudadas depois de aprovar ou nunca enviadas. */
+async function painelPendentes(painel) {
+  const w = await chamar(window.api.whatsapp.ler());
+  const temWhats = Boolean(w && w.conta);
+  if (temWhats) await atualizarMeta(); // traz a situação mais nova da Meta
+  const lista = S.modelos.filter((m) => situacaoMeta(m).codigo !== 'aprovado');
+  painel.append(h('p', { class: 'apoio' }, 'Mensagens que ainda não podem ir no envio real. Quando a Meta aprova, a mensagem sai daqui e fica pronta no passo 1 da campanha.'));
+  if (!lista.length) { painel.append(h('p', {}, 'Nenhuma pendente: todas as mensagens salvas estão aprovadas pela Meta.')); return; }
+  const cats = S.categorias || {};
+  painel.append(h('div', { class: 'tabela' }, h('table', {}, h('caption', { class: 'so-leitor' }, 'Mensagens pendentes na Meta'),
+    h('thead', {}, h('tr', {}, ['Mensagem', 'Situação', 'Tipo', 'Enviada para a Meta', h('span', { class: 'so-leitor' }, 'Ações')].map((x) => h('th', { scope: 'col' }, x)))),
+    h('tbody', {}, lista.map((m) => {
+      const sm = situacaoMeta(m);
+      const meta = m.meta || {};
+      return h('tr', {},
+        h('td', {}, m.nome, m.imagem ? ' 🖼' : ''),
+        h('td', {}, seloMeta(m)),
+        h('td', {}, meta.categoria ? (cats[meta.categoria] ? cats[meta.categoria].rotulo : meta.categoria) : '—'),
+        h('td', {}, meta.enviadoEm ? `${dataBR(meta.enviadoEm)}${meta.por ? `, por ${meta.por}` : ''}` : 'Ainda não'),
+        h('td', { class: 'acoes-linha' },
+          temWhats && ['sem', 'mudou', 'recusado'].includes(sm.codigo)
+            ? h('button', { type: 'button', class: 'btn', onclick: async () => { const r = await pedirAprovacao(m); if (r) { await ir('historico'); avisoOk(`“${m.nome}” foi para a Meta. ${r.situacao.texto}.`); } } }, 'Aprovar na Meta') : null,
+          h('button', { type: 'button', class: 'btn', onclick: async () => { const r = await editarMensagem(m); if (r) await ir('historico'); } }, 'Editar')));
+    })))));
+  if (temWhats && lista.some((m) => situacaoMeta(m).codigo === 'analise')) {
+    painel.append(h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: async () => { await ir('historico'); avisoOk('Situação na Meta atualizada.'); } }, '↻ Ver se já foi aprovada')));
+  }
 }
 
 /* =====================================================================
