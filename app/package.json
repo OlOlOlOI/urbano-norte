@@ -1,7 +1,7 @@
 {
   "name": "urbano-norte",
   "productName": "Urbano Norte",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Sistemas da Urbano Norte em um app só: sorteio e disparo de mensagens",
   "main": "main.js",
   "author": "Urbano Norte",
@@ -13,7 +13,7 @@
     "start": "electron .",
     "predist": "npm run montar",
     "dist": "electron-builder --publish never",
-    "test": "node --test test/migracao.test.js",
+    "test": "node --test test/migracao.test.js test/empacotamento.test.js",
     "test:visual": "npm run montar && electron test/captura.js"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "files": [
       "main.js",
       "atualizacao.js",
+      "conta.js",
       "migracao.js",
       "shell/**/*",
       "modulos/**/*",

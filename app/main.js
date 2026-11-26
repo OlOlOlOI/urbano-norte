@@ -3,10 +3,15 @@
 // Cada tela tem o seu preload e o seu window.api, então os sistemas não se misturam.
 // O código de cada sistema vem de ../sorteio/desktop e ../disparo/src (copiado para modulos/ por scripts/montar-modulos.js).
 const { app, BrowserWindow, WebContentsView, ipcMain, Menu, shell } = require('electron');
+
+// A atualização automática vem PRIMEIRO e é registrada antes de carregar o resto: se uma versão sair com defeito
+// (ex.: faltar um arquivo no instalador), o app ainda procura e instala a correção sozinho.
+const { iniciarAtualizacao } = require('./atualizacao');
+app.whenReady().then(() => iniciarAtualizacao(() => { try { return janelaViva(); } catch { return null; } }));
+
 const path = require('path');
 const fs = require('fs');
 const { migrar } = require('./migracao');
-const { iniciarAtualizacao } = require('./atualizacao');
 const conta = require('./conta');
 
 // Para testes: guardar os dados em outra pasta, sem mexer nos dados reais deste computador.
@@ -186,7 +191,6 @@ app.whenReady().then(() => {
   });
   criarJanela();
   conta.conferir(); // confere com o servidor em segundo plano (senha trocada, conta desativada...)
-  iniciarAtualizacao(janelaViva);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
 });
 
