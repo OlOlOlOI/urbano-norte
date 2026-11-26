@@ -5,10 +5,10 @@ main = "src/index.js"
 compatibility_date = "2026-11-01"
 
 [vars]
-PHONE_NUMBER_ID = "1373163822556154"  # número de TESTE da Meta (+1); trocar pelo brasileiro
+PHONE_NUMBER_ID = "1501978266325095"  # +55 64 99905-1127 (Vivo, Urbano Norte Suporte)
 APP_ID = "1193485733016308"           # app "Disparo Urbano Norte" na Meta
-WABA_ID = "1146655898265244"
-IG_ID = "17841414616222549"           # conta do Instagram @urbanorioverde (usado só com token do Facebook, EAA…)          # conta do WhatsApp Business (Identificação da conta de mensagens)
+WABA_ID = "1789237192189564"           # conta do WhatsApp Business "Urbano Norte Rio Verde"
+IG_ID = "17841414616222549"           # conta do Instagram @urbanorioverde (usado só com token do Facebook, EAA…)
 
 [[d1_databases]]
 binding = "DB"

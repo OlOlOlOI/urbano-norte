@@ -30,7 +30,7 @@ Criado em 2026-11-25 a partir dos repositórios `OlOlOlOI/sorteio-urbano-norte` 
 
 ## WhatsApp (Meta) — o que já se sabe
 - App na Meta: "Disparo Urbano Norte", portfólio "Urbano Norte Rio Verde" (não verificado). Graph API v27.0.
-- O número de teste da Meta (+1) NÃO entrega no Brasil (erro 130497: restrição da Meta a envio de outro país para o Brasil). É preciso um número brasileiro da empresa (Etapa 2). Em 2026-11-25 a empresa ainda não tinha esse número; a ideia é um fixo virtual ou eSIM pré-pago, usado só para receber o código uma vez.
+- O número de teste da Meta (+1) NÃO entrega no Brasil (erro 130497: restrição da Meta a envio de outro país para o Brasil). É preciso um número brasileiro da empresa (Etapa 2). Desde 2026-11-26 o número real é +55 64 99905-1127 (eSIM Vivo Easy Lite, linha "URBANO NORTE SUPORTE" no iPhone do Rayan; não instalar WhatsApp nele; manter a assinatura ativa). WABA nova "Urbano Norte Rio Verde" 1789237192189564, PHONE_NUMBER_ID 1501978266325095 (AtendimentoUN tem acesso total). A WABA de teste 1146655898265244 ficou só com o +1.
 - O WhatsApp guarda celulares brasileiros sem o 9 extra (wa_id 5564XXXXXXXX); a tela mostra com o 9.
 - Campanhas do Disparo continuam em simulação; só o teste "no meu número" e o Atendimento usam a API de verdade.
 - Instagram no Atendimento: só mensagens diretas (decisão do dono: sem menções/marcações/comentários; menções em Stories que chegam pelo direct também são ignoradas no servidor). Conversas do Instagram usam id `ig_<IGSID>` e canal `instagram`; envio por graph.instagram.com com IG_TOKEN.
