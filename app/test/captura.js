@@ -111,6 +111,8 @@ app.whenReady().then(async () => {
     await simular({ de: '556492937604', nome: 'Ana Paula', tipo: 'image', texto: 'Foto da bolsa', minutosAtras: 11 });
     await simular({ de: '556299990000', nome: 'João Victor', texto: 'Qual o valor da corrida até o aeroporto?', minutosAtras: 3 });
     await simular({ de: '556481110000', nome: 'Carla', texto: 'Obrigada pelo atendimento!', minutosAtras: 60 * 30 });
+    await simular({ canal: 'instagram', de: '9001', nome: 'Bia Souza', usuario: 'bia.souza', tipo: 'image', texto: '', minutosAtras: 1.2 });
+    await simular({ canal: 'instagram', de: '9001', nome: 'Bia Souza', usuario: 'bia.souza', tipo: 'audio', texto: '', minutosAtras: 1.1 });
     await simular({ canal: 'instagram', de: '9001', nome: 'Bia Souza', usuario: 'bia.souza', texto: 'Oi! Vocês fazem corrida pra Montividiu?', minutosAtras: 1 });
     await simular({ de: '556299990000', nome: 'João Victor', tipo: 'audio', minutosAtras: 2 });
     const ta = t.atendimento.webContents;
@@ -120,8 +122,8 @@ app.whenReady().then(async () => {
     principal.mostrarAba('atendimento');
     // o contador da aba vem da vigia, que confere o servidor a cada 20 s
     let contador = '';
-    for (let i = 0; i < 25 && contador !== '6'; i++) { await espera(1000); contador = await shellJs("document.getElementById('contador-atendimento').textContent"); }
-    conferir('atendimento: contador de não lidas na aba', contador === '6', `contador=${contador}`);
+    for (let i = 0; i < 25 && contador !== '8'; i++) { await espera(1000); contador = await shellJs("document.getElementById('contador-atendimento').textContent"); }
+    conferir('atendimento: contador de não lidas na aba', contador === '8', `contador=${contador}`);
     const nomes = await ta.executeJavaScript("[...document.querySelectorAll('.item-nome')].map(e => e.textContent)");
     conferir('atendimento: lista WhatsApp e Instagram juntos, mais recente primeiro', JSON.stringify(nomes) === JSON.stringify(['Bia Souza', 'João Victor', 'Ana Paula', 'Carla']), JSON.stringify(nomes));
     const selos = await ta.executeJavaScript("[...document.querySelectorAll('.lista .canal')].map(e => e.textContent).join(',')");
@@ -138,6 +140,15 @@ app.whenReady().then(async () => {
     await espera(1500);
     const respIg = await ta.executeJavaScript("(() => { const b = [...document.querySelectorAll('.bolha.saida')].pop(); return b ? b.textContent : ''; })()");
     conferir('atendimento: responde no Instagram', /Fazemos sim, Bia/.test(respIg), respIg.slice(0, 60));
+    // o CDN do Instagram manda foto e áudio como "octet-stream": o app reconhece pelo arquivo e mostra na conversa
+    await ta.executeJavaScript("[...document.querySelectorAll('.midia .btn')].find(b => b.textContent.includes('Ver foto')).click()");
+    await espera(1500);
+    await ta.executeJavaScript("[...document.querySelectorAll('.midia .btn')].find(b => b.textContent.includes('Ouvir')).click()");
+    await espera(1500);
+    const igMidia = await ta.executeJavaScript("({ foto: !!document.querySelector('.midia img[src^=\"data:image/png\"]'), audio: !!document.querySelector('.midia audio[src^=\"data:audio/wav\"]') })");
+    conferir('atendimento: foto e áudio do Instagram aparecem na conversa (sem abrir arquivo de texto)', igMidia.foto && igMidia.audio, JSON.stringify(igMidia));
+    const anexoIg = await ta.executeJavaScript("document.getElementById('btn-anexo').disabled");
+    conferir('atendimento: no Instagram o botão de anexo fica desligado', anexoIg === true);
     await capturar('4b-atendimento-instagram');
     await ta.executeJavaScript("[...document.querySelectorAll('.filtros.canais button')].find(b => b.textContent === 'Todos').click()");
     await espera(1200);
@@ -158,6 +169,16 @@ app.whenReady().then(async () => {
     await ta.executeJavaScript("(() => { const t = document.getElementById('texto'); t.value = 'Oi Ana! Já falamos com o motorista, ele guardou sua bolsa. Pode buscar hoje às 18h.'; document.getElementById('btn-enviar').click(); })()");
     await espera(1500);
     const ultima = await ta.executeJavaScript("(() => { const b = [...document.querySelectorAll('.bolha.saida')].pop(); return b ? b.textContent : ''; })()");
+    // mandar foto: confirmação com legenda e a foto aparece na conversa
+    const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    await ta.executeJavaScript(`(() => { const b = Uint8Array.from(atob('${PNG1}'), (c) => c.charCodeAt(0));
+      prepararArquivo({ nome: 'comprovante.png', tipo: 'image/png', tamanho: b.length, dataUrl: 'data:image/png;base64,${PNG1}', bytes: b }); })()`);
+    await espera(500);
+    await capturar('5c-atendimento-mandar-foto');
+    await ta.executeJavaScript("(() => { document.querySelector('#dialogo .legenda').value = 'Comprovante da corrida'; [...document.querySelectorAll('#dialogo .btn.principal')].pop().click(); })()");
+    await espera(2000);
+    const fotoEnviada = await ta.executeJavaScript("(() => { const b = [...document.querySelectorAll('.bolha.saida')].pop(); return b ? { img: !!b.querySelector('img'), texto: b.textContent } : null; })()");
+    conferir('atendimento: manda foto com legenda e ela aparece na conversa', fotoEnviada && fotoEnviada.img && /Comprovante da corrida/.test(fotoEnviada.texto), JSON.stringify(fotoEnviada));
     conferir('atendimento: resposta enviada aparece com o nome de quem respondeu', /Rayan/.test(ultima) && /guardou sua bolsa/.test(ultima), ultima.slice(0, 80));
     await simular({ de: '556492937604', nome: 'Ana Paula', texto: 'Muito obrigada!! 🙏' });
     let chegou = false; // a tela confere o servidor a cada 4 s: espera até 10 s

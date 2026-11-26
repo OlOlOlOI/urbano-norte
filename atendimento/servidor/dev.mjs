@@ -28,8 +28,11 @@ if (process.argv.includes('--meta-falsa')) {
     if (u.includes('graph.instagram.com') && u.includes('/messages')) return Response.json({ recipient_id: '1', message_id: `ig.mid.DEV${++n}` });
     if (u.includes('graph.instagram.com') && u.includes('fields=name,username')) return Response.json({ name: perfisIg.get(u.split('/').pop().split('?')[0])?.nome || 'Cliente Instagram', username: perfisIg.get(u.split('/').pop().split('?')[0])?.usuario || 'cliente' });
     if (u.includes('/messages')) return Response.json({ messages: [{ id: `wamid.DEV${++n}` }] });
+    if (u.endsWith('/media') && op && op.method === 'POST') { const id = `MIDDEV${++n}`; tiposMidia.set(id, 'image'); return Response.json({ id }); }
     const tipo = tiposMidia.get(u.split('id=').pop()) || (u.includes('audio') ? 'audio' : 'image');
-    if (u.includes('lookaside') || u.includes('cdn.exemplo')) return tipo === 'audio' ? new Response(WAV, { headers: { 'Content-Type': 'audio/wav' } }) : new Response(PNG, { headers: { 'Content-Type': 'image/png' } });
+    // o CDN do Instagram (cdn.exemplo) entrega como "octet-stream", igual ao de verdade: o app precisa reconhecer pelo arquivo
+    if (u.includes('cdn.exemplo')) return new Response(tipo === 'audio' ? WAV : PNG, { headers: { 'Content-Type': 'application/octet-stream' } });
+    if (u.includes('lookaside')) return tipo === 'audio' ? new Response(WAV, { headers: { 'Content-Type': 'audio/wav' } }) : new Response(PNG, { headers: { 'Content-Type': 'image/png' } });
     const id = u.split('/').pop().split('?')[0];
     return Response.json({ url: `https://lookaside.exemplo/arquivo?id=${id}`, mime_type: tiposMidia.get(id) === 'audio' ? 'audio/wav' : 'image/png' });
   };

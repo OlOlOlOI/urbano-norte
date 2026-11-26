@@ -4,7 +4,7 @@
 // O token do WhatsApp fica só no servidor. No app unificado, quem entra é a CONTA da pessoa (login, app/conta.js):
 // o app passa `pedir` e `sessao` em registrar() e o Atendimento usa essa sessão. Sem isso (modo antigo),
 // usa o endereço e a chave guardados aqui (cifrados).
-const { app, ipcMain, safeStorage, shell, Notification } = require('electron');
+const { app, ipcMain, safeStorage, shell, Notification, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -62,6 +62,29 @@ async function chamarServidor(caminho, { metodo = 'GET', corpo, cfg, binario = f
   if (r.status === 401) throw new Error('A chave de acesso do Atendimento não confere. Confira em Configurar.');
   if (!r.ok || !dados || dados.ok === false) throw new Error((dados && dados.erro) || `O servidor respondeu ${r.status}.`);
   return dados;
+}
+
+/**
+ * Descobre o tipo do arquivo pelos primeiros bytes. O Instagram às vezes entrega áudio e foto marcados como
+ * "arquivo genérico" (application/octet-stream): sem isso o app salvava sem extensão e o computador abria como texto.
+ * @param {Buffer} b
+ * @param {string} [tipoMsg] tipo da mensagem (audio, image, video...) para desempatar o MP4
+ */
+function tipoPelosBytes(b, tipoMsg = '') {
+  const ascii = (ini, fim) => b.subarray(ini, fim).toString('latin1');
+  if (b.length < 12) return null;
+  if (ascii(0, 4) === 'OggS') return 'audio/ogg';
+  if (ascii(4, 8) === 'ftyp') return /^M4A|^M4B/.test(ascii(8, 12)) || tipoMsg === 'audio' ? 'audio/mp4' : 'video/mp4';
+  if (ascii(0, 3) === 'ID3' || (b[0] === 0xff && (b[1] & 0xe6) === 0xe2)) return 'audio/mpeg';
+  if (b[0] === 0xff && (b[1] & 0xf6) === 0xf0) return 'audio/aac';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'audio/wav';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return tipoMsg === 'audio' ? 'audio/webm' : 'video/webm';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b[0] === 0x89 && ascii(1, 4) === 'PNG') return 'image/png';
+  if (ascii(0, 4) === 'GIF8') return 'image/gif';
+  if (ascii(0, 4) === '%PDF') return 'application/pdf';
+  return null;
 }
 
 // número do WhatsApp (só dígitos) ou "ig_<id>" do Instagram
@@ -151,14 +174,17 @@ function registrarIpc() {
   h('atendimento:reabrir', ({ waId }) => chamarServidor(`/api/conversas/${enc(waId)}/reabrir`, { metodo: 'POST' }));
 
   // Fotos e áudios aparecem na própria conversa; outros arquivos (PDF, vídeo) abrem no programa padrão do computador.
-  h('atendimento:midia', async ({ midiaId, nome, abrir }) => {
+  h('atendimento:midia', async ({ midiaId, nome, abrir, tipoMsg }) => {
     const id = String(midiaId || '').replace(/[^\w-]/g, '');
     const r = await chamarServidor(`/api/midia/${id}`, { binario: true });
     if (!r.bytes) throw new Error('Não foi possível baixar o arquivo.');
+    // vale o que o arquivo é de verdade (o Instagram às vezes declara tipo genérico ou errado); sem reconhecer, fica o declarado
+    const pelosBytes = tipoPelosBytes(r.bytes, tipoMsg);
+    if (pelosBytes) r.tipo = pelosBytes;
     if (!abrir && /^(image|audio)\//.test(r.tipo) && r.bytes.length < 16 * 1024 * 1024) {
       return { dataUrl: `data:${r.tipo};base64,${r.bytes.toString('base64')}` };
     }
-    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }[r.tipo.split(';')[0]] || '';
+    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/mpeg': '.mp3', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/webm': '.webm', 'video/mp4': '.mp4', 'video/webm': '.webm', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }[r.tipo.split(';')[0].trim()] || '.bin';
     const seguro = String(nome || `arquivo-${id}`).replace(/[^\w.\- ]/g, '_').slice(0, 80);
     const pasta = path.join(app.getPath('temp'), 'atendimento-urbano-norte');
     fs.mkdirSync(pasta, { recursive: true });
@@ -167,6 +193,24 @@ function registrarIpc() {
     const falha = await shell.openPath(alvo);
     if (falha) throw new Error(falha);
     return { aberto: true };
+  });
+
+  // Foto (JPG/PNG até 5 MB) ou PDF (até 16 MB) para o cliente. Vem do botão 📎 (escolher=true) ou colado na resposta (bytes).
+  h('atendimento:escolherArquivo', async () => {
+    const r = await dialog.showOpenDialog(janela() || undefined, { title: 'Mandar foto ou PDF', properties: ['openFile'], filters: [{ name: 'Foto ou PDF', extensions: ['jpg', 'jpeg', 'png', 'pdf'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const bytes = fs.readFileSync(r.filePaths[0]);
+    const tipo = tipoPelosBytes(bytes);
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(tipo)) throw new Error('Dá para mandar foto (JPG ou PNG) ou PDF.');
+    return { nome: path.basename(r.filePaths[0]), tipo, tamanho: bytes.length, dataUrl: tipo.startsWith('image/') ? `data:${tipo};base64,${bytes.toString('base64')}` : null, bytes };
+  });
+  h('atendimento:enviarArquivo', async ({ waId, nome, bytes, legenda }) => {
+    const buf = Buffer.from(bytes || []);
+    const tipo = tipoPelosBytes(buf);
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(tipo)) throw new Error('Dá para mandar foto (JPG ou PNG) ou PDF.');
+    const max = tipo === 'application/pdf' ? 16 : 5;
+    if (buf.length > max * 1024 * 1024) throw new Error(`O arquivo passa de ${max} MB.`);
+    return chamarServidor(`/api/conversas/${enc(waId)}/enviar-arquivo`, { metodo: 'POST', corpo: { nome: String(nome || '').slice(0, 120), tipo, base64: buf.toString('base64'), legenda: String(legenda || '') } });
   });
 
   h('atendimento:diagnostico', () => chamarServidor('/api/diagnostico', { metodo: 'POST' }));
@@ -197,4 +241,4 @@ function registrar(op = {}) {
 /** Recomeça a vigia (ex.: alguém entrou ou saiu da conta). */
 function reiniciar() { aoNaoLidas(0); iniciarVigia(); avisar('atendimento:conta', null); }
 
-module.exports = { registrar, reiniciar, validarUrl, formatar };
+module.exports = { registrar, reiniciar, validarUrl, formatar, tipoPelosBytes };

@@ -564,3 +564,34 @@ test('botão "Não quero receber" da campanha: descadastra, confirma para a pess
   await webhook(env, outro);
   assert.strictEqual((await (await api(env, '/api/descadastros')).json()).descadastros.length, 1);
 });
+
+test('equipe manda foto e PDF pelo WhatsApp: sobe para a Meta, envia e aparece na conversa com o nome de quem mandou', async () => {
+  const env = ambiente();
+  await webhook(env, mensagemCliente('wamid.F0', 'me manda o comprovante?'));
+  const original = globalThis.fetch;
+  const chamadas = [];
+  globalThis.fetch = async (url, op = {}) => {
+    const u = String(url);
+    chamadas.push({ url: u, op });
+    if (u.endsWith('/media')) return Response.json({ id: 'MEDIA-77' });
+    return Response.json({ messages: [{ id: `wamid.ARQ${chamadas.length}` }] });
+  };
+  try {
+    const png = Buffer.from('89504e470d0a1a0a0000', 'hex').toString('base64');
+    const r = await (await api(env, '/api/conversas/556492937604/enviar-arquivo', { method: 'POST', body: JSON.stringify({ nome: 'comprovante.png', tipo: 'image/png', base64: png, legenda: 'Aqui está' }) })).json();
+    assert.strictEqual(r.ok, true, JSON.stringify(r));
+    assert.strictEqual(r.mensagem.midia_id, 'MEDIA-77');
+    assert.strictEqual(r.mensagem.operador, 'Rayan');
+    assert.ok(chamadas[0].op.body instanceof FormData);
+    const envio = JSON.parse(chamadas[1].op.body);
+    assert.deepStrictEqual(envio.image, { id: 'MEDIA-77', caption: 'Aqui está' });
+    const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+    const r2 = await (await api(env, '/api/conversas/556492937604/enviar-arquivo', { method: 'POST', body: JSON.stringify({ nome: 'tabela.pdf', tipo: 'application/pdf', base64: pdf }) })).json();
+    assert.strictEqual(JSON.parse(chamadas[3].op.body).document.filename, 'tabela.pdf');
+    assert.strictEqual(r2.mensagem.tipo, 'document');
+    const ruim = await api(env, '/api/conversas/556492937604/enviar-arquivo', { method: 'POST', body: JSON.stringify({ nome: 'x.exe', tipo: 'application/x-msdownload', base64: pdf }) });
+    assert.strictEqual(ruim.status, 400);
+  } finally { globalThis.fetch = original; }
+  const conv = (await (await api(env, '/api/conversas')).json()).conversas[0];
+  assert.strictEqual(conv.previa, '📄 Documento');
+});

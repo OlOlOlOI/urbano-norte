@@ -13,6 +13,8 @@ Aba **Atendimento** do app unificado: as conversas do **WhatsApp** e as **mensag
 - Marca como lida no celular do cliente (dois tiques azuis) ao abrir a conversa.
 - Indica a janela de 24 h do WhatsApp e bloqueia texto livre quando ela fecha.
 - Resolver / reabrir conversa (se o cliente escrever de novo, ela reabre sozinha). Conversas resolvidas somem da lista depois de 3 dias sem novidade (a busca ainda acha; o tempo fica em ESCONDER_RESOLVIDAS_MS no servidor).
+- Mandar foto (JPG/PNG até 5 MB) ou PDF (até 16 MB): botão 📎 ou colar a imagem na resposta (Ctrl+V/Cmd+V), com legenda. Só WhatsApp por enquanto (no Instagram a Meta exige o arquivo num endereço público).
+- Foto e áudio recebidos: o app reconhece o tipo pelo conteúdo do arquivo (o CDN do Instagram manda como "octet-stream"). Foto/vídeo de visualização única do Instagram não chega pela API: aparece um aviso.
 - Renomear contato (✎ ao lado do nome): o nome dado pela equipe vale para todos os computadores e entra na busca; vazio volta ao nome do perfil. O nome do perfil do WhatsApp só se atualiza quando o cliente manda mensagem nova (o WhatsApp não avisa troca de nome). Perfil sem letras ("-", emoji) aparece pelo número.
 
 Ainda não: enviar fotos/arquivos/áudio, responder com modelo aprovado fora das 24 h, transferir conversa entre pessoas.

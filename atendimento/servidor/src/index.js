@@ -154,6 +154,8 @@ export function lerMensagemInstagram(ev, contato) {
     }
     else if (tipo === 'share') texto = [texto, url].filter(Boolean).join(' ') || null;
     else if (url) midia = { id: `${m.mid}_0`.replace(/[^\w-]/g, '').slice(-120), url, mime: { image: 'image/jpeg', audio: 'audio/mp4', video: 'video/mp4' }[tipo] || null, nome: null };
+    // foto/vídeo de visualização única (sem "manter na conversa"): o Instagram não manda o arquivo para sistemas de fora
+    else texto = texto || '📷 Foto ou vídeo temporário (visualização única): o Instagram só mostra no próprio app do Instagram.';
   }
   if (m.reply_to && m.reply_to.story) texto = `↩ Respondeu ao seu Story${texto ? ': ' + texto : ''}`;
   const ts = Number(ev.timestamp) || 0;
@@ -355,6 +357,55 @@ async function enviarTexto(env, db, waId, texto, operador) {
   return json({ ok: true, mensagem: await db.prepare('SELECT * FROM mensagens WHERE id = ?').bind(id).first() });
 }
 
+// Foto e PDF que a equipe manda pelo Atendimento (só WhatsApp por enquanto).
+export const ARQUIVOS_ACEITOS = {
+  'image/jpeg': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'image/png': { tipo: 'image', max: 5 * 1024 * 1024 },
+  'application/pdf': { tipo: 'document', max: 16 * 1024 * 1024 },
+};
+
+async function enviarArquivo(env, db, waId, { nome, tipo, base64, legenda }, operador) {
+  const regra = ARQUIVOS_ACEITOS[tipo];
+  if (!regra) return erro(400, 'Dá para mandar foto (JPG ou PNG) ou PDF.');
+  if (ehInstagram(waId)) return erro(400, 'Mandar foto pelo Instagram ainda não está disponível. Pelo WhatsApp funciona.');
+  let bytes;
+  try { bytes = Uint8Array.from(atob(String(base64 || '')), (c) => c.charCodeAt(0)); } catch { return erro(400, 'Arquivo inválido.'); }
+  if (!bytes.length) return erro(400, 'O arquivo está vazio.');
+  if (bytes.length > regra.max) return erro(400, `O arquivo passa de ${regra.max / 1024 / 1024} MB.`);
+  const conversa = await db.prepare('SELECT ultima_entrada_em FROM conversas WHERE wa_id = ?').bind(waId).first();
+  if (!conversa) return erro(404, 'Conversa não encontrada.');
+  if (!conversa.ultima_entrada_em || agora() - conversa.ultima_entrada_em > JANELA_MS) return erro(409, ERROS_META[131047]);
+  const nomeArq = String(nome || (regra.tipo === 'image' ? 'foto.jpg' : 'documento.pdf')).replace(/[\r\n"]/g, '').slice(0, 120);
+  const texto = String(legenda || '').trim().slice(0, 1024) || null;
+
+  // 1) sobe o arquivo para a Meta (vale 30 dias)
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', tipo);
+  form.append('file', new Blob([bytes], { type: tipo }), nomeArq);
+  const up = await fetch(`${GRAPH}/${env.PHONE_NUMBER_ID}/media`, { method: 'POST', headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` }, body: form });
+  let dadosUp = null;
+  try { dadosUp = await up.json(); } catch { /* sem JSON */ }
+  if (!up.ok || !dadosUp || !dadosUp.id) return erro(502, `A Meta não aceitou o arquivo: ${explicar(dadosUp && dadosUp.error)}`);
+  const midiaId = String(dadosUp.id);
+
+  // 2) manda a mensagem com o arquivo
+  const conteudo = regra.tipo === 'image'
+    ? { type: 'image', image: { id: midiaId, ...(texto ? { caption: texto } : {}) } }
+    : { type: 'document', document: { id: midiaId, filename: nomeArq, ...(texto ? { caption: texto } : {}) } };
+  const r = await graph(env, `${env.PHONE_NUMBER_ID}/messages`, { method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: waId, ...conteudo }) });
+  if (!r.ok) return erro(502, r.erro);
+  const id = r.dados.messages && r.dados.messages[0] && r.dados.messages[0].id;
+  if (!id) return erro(502, 'A Meta não devolveu o código da mensagem.');
+  const t = agora();
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO mensagens (id, wa_id, direcao, tipo, texto, midia_id, midia_mime, midia_nome, status, operador, criada_em, atualizada_em)
+                VALUES (?, ?, 'saida', ?, ?, ?, ?, ?, 'enviada', ?, ?, ?)`).bind(id, waId, regra.tipo, texto, midiaId, tipo, nomeArq, operador || null, t, t),
+    db.prepare('UPDATE conversas SET previa = ?, ultima_msg_em = ?, atualizada_em = ? WHERE wa_id = ?').bind(resumoDe(regra.tipo, texto), t, t, waId),
+  ]);
+  return json({ ok: true, mensagem: await db.prepare('SELECT * FROM mensagens WHERE id = ?').bind(id).first() });
+}
+
 // ---------- rotas ----------
 async function rotaWebhook(request, env, ctx) {
   const url = new URL(request.url);
@@ -539,6 +590,11 @@ async function rotaAtendimento(request, env, caminho, conta) {
       const conversa = await db.prepare('SELECT * FROM conversas WHERE wa_id = ?').bind(waId).first();
       return json({ ok: true, conversa, mensagens: results, agora: agora() });
     }
+    if (request.method === 'POST' && acao === 'enviar-arquivo') {
+      let corpo = {};
+      try { corpo = await request.json(); } catch { /* vazio */ }
+      return enviarArquivo(env, db, waId, corpo, conta.nome);
+    }
     if (request.method === 'POST' && acao === 'enviar') {
       let corpo = {};
       try { corpo = await request.json(); } catch { /* vazio */ }
@@ -580,7 +636,10 @@ async function rotaAtendimento(request, env, caminho, conta) {
     if (existe.midia_url) {
       const arq = await fetch(existe.midia_url);
       if (!arq.ok) return erro(502, 'O Instagram não entregou o arquivo (ele pode ter expirado).');
-      return new Response(arq.body, { headers: { 'Content-Type': arq.headers.get('Content-Type') || existe.midia_mime || 'application/octet-stream', 'Cache-Control': 'no-store' } });
+      // o CDN do Instagram às vezes manda áudio/foto como "octet-stream" ou texto: vale mais o tipo que a mensagem informou
+      const doCdn = String(arq.headers.get('Content-Type') || '');
+      const generico = !doCdn || /octet-stream|^text\/|^binary\//i.test(doCdn);
+      return new Response(arq.body, { headers: { 'Content-Type': (generico ? existe.midia_mime : doCdn) || doCdn || 'application/octet-stream', 'Cache-Control': 'no-store' } });
     }
     const info = await graph(env, midiaId);
     if (!info.ok) return erro(502, info.erro);

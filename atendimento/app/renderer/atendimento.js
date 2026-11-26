@@ -242,7 +242,7 @@ function bolha(m) {
       const textoBotao = imagem ? 'Ver foto' : audio ? '▶ Ouvir' : story ? 'Ver Story' : 'Abrir';
       const botao = h('button', { type: 'button', class: 'btn', onclick: async () => {
         botao.disabled = true; botao.textContent = 'Baixando…';
-        const r = await chamar(window.api.midia({ midiaId: m.midia_id, nome: m.midia_nome, abrir: !naTela }));
+        const r = await chamar(window.api.midia({ midiaId: m.midia_id, nome: m.midia_nome, abrir: !naTela, tipoMsg: m.tipo }));
         botao.disabled = false; botao.textContent = textoBotao;
         if (r && r.dataUrl) { S.midias.set(m.midia_id, r.dataUrl); desenharMensagens(false); }
       } }, textoBotao);
@@ -300,7 +300,19 @@ function desenharConversa() {
     const texto = h('textarea', { id: 'texto', rows: '1', placeholder: 'Escreva a resposta… (Enter envia, Shift+Enter pula linha)', 'aria-label': 'Resposta' });
     texto.addEventListener('input', () => { texto.style.height = 'auto'; texto.style.height = Math.min(texto.scrollHeight, 160) + 'px'; });
     texto.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } });
-    sec.append(h('div', { class: 'escrever' }, texto, h('button', { type: 'button', class: 'btn principal', id: 'btn-enviar', onclick: enviar }, 'Enviar')));
+    // colar uma imagem (Ctrl+V / Cmd+V) na resposta abre a confirmação de envio da foto
+    texto.addEventListener('paste', async (e) => {
+      const arq = [...(e.clipboardData && e.clipboardData.files || [])].find((f) => /^image\/(png|jpeg)$/.test(f.type));
+      if (!arq || ehIg(c)) return;
+      e.preventDefault();
+      const bytes = new Uint8Array(await arq.arrayBuffer());
+      const dataUrl = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(arq); });
+      prepararArquivo({ nome: arq.name && arq.name !== 'image.png' ? arq.name : `foto-${Date.now()}.${arq.type === 'image/png' ? 'png' : 'jpg'}`, tipo: arq.type, tamanho: bytes.length, dataUrl, bytes });
+    });
+    const anexar = h('button', { type: 'button', class: 'btn btn-anexo', id: 'btn-anexo', disabled: ehIg(c),
+      title: ehIg(c) ? 'Mandar foto pelo Instagram ainda não está disponível' : 'Mandar foto (JPG/PNG) ou PDF. Também dá para colar uma imagem na resposta.',
+      'aria-label': 'Mandar foto ou PDF', onclick: async () => { const a = await chamar(window.api.escolherArquivo()); if (a) prepararArquivo(a); } }, '📎');
+    sec.append(h('div', { class: 'escrever' }, anexar, texto, h('button', { type: 'button', class: 'btn principal', id: 'btn-enviar', onclick: enviar }, 'Enviar')));
   } else {
     sec.append(h('div', { class: 'fechada-aviso' }, 'Já passaram 24 h desde a última mensagem do cliente. Pelas regras do WhatsApp e do Instagram, só dá para responder quando ele escrever de novo (ou com um modelo aprovado pela Meta, que chegará numa próxima versão).'));
   }
@@ -366,6 +378,33 @@ async function abrir(waId) {
   await chamar(window.api.lida({ waId }), { calado: true });
   const c = S.conversas.find((x) => x.wa_id === waId); if (c) { c.nao_lidas = 0; desenharLista(); }
   const t = $('#texto'); if (t) t.focus();
+}
+
+/* Confirma a foto/PDF antes de mandar, com legenda opcional (aproveita o que já estava escrito na resposta). */
+function prepararArquivo(a) {
+  const d = limpar($('#dialogo'));
+  const caixa = $('#texto');
+  const legenda = h('textarea', { rows: '2', class: 'legenda', placeholder: 'Legenda (opcional)', 'aria-label': 'Legenda' });
+  legenda.value = caixa ? caixa.value.trim() : '';
+  const erro = h('p', { class: 'erro-texto', role: 'alert' });
+  const botao = h('button', { type: 'button', class: 'btn principal', onclick: async () => {
+    botao.disabled = true; botao.textContent = 'Enviando…'; erro.textContent = '';
+    const r = await window.api.enviarArquivo({ waId: S.atual, nome: a.nome, bytes: a.bytes, legenda: legenda.value });
+    if (!r || !r.ok) { erro.textContent = (r && r.erro) || 'Não foi possível enviar.'; botao.disabled = false; botao.textContent = 'Enviar'; return; }
+    const m = r.dados.mensagem;
+    if (a.dataUrl && m.midia_id) S.midias.set(m.midia_id, a.dataUrl);
+    S.mensagens.set(m.id, m);
+    if (caixa && legenda.value.trim() && caixa.value.trim() === legenda.value.trim()) { caixa.value = ''; caixa.style.height = 'auto'; }
+    d.close();
+    desenharMensagens(true);
+    carregarLista();
+  } }, 'Enviar');
+  d.append(h('h2', { id: 'dialogo-titulo' }, a.tipo === 'application/pdf' ? 'Mandar PDF' : 'Mandar foto'),
+    a.dataUrl ? h('img', { src: a.dataUrl, alt: 'Foto que vai ser enviada', class: 'previa-envio' }) : h('p', { class: 'arquivo-envio' }, `📄 ${a.nome} · ${Math.ceil(a.tamanho / 1024)} KB`),
+    legenda, erro,
+    h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: () => d.close() }, 'Cancelar'), botao));
+  d.showModal();
+  legenda.focus();
 }
 
 async function enviar() {
