@@ -226,14 +226,15 @@ async function idDoInstagram(env) {
   if (String(env.IG_TOKEN || '').startsWith('IG')) return null;
   if (env.IG_ID) return env.IG_ID;
   if (!String(env.IG_TOKEN || '').startsWith('EAA')) return null;
-  if (igIdDescoberto) return igIdDescoberto;
+  if (igIdDescoberto && igIdDescoberto.de === env.IG_TOKEN) return igIdDescoberto.id;
+  igIdDescoberto = null;
   try {
     const r = await fetch(`${GRAPH}/me/accounts?fields=instagram_business_account{id,username}&limit=50`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
     const d = await r.json();
     const conta = (d.data || []).map((p) => p.instagram_business_account).find(Boolean);
-    if (conta) igIdDescoberto = conta.id;
+    if (conta) igIdDescoberto = { id: conta.id, de: env.IG_TOKEN };
   } catch { /* sem rede: tenta na próxima */ }
-  return igIdDescoberto;
+  return igIdDescoberto && igIdDescoberto.id;
 }
 
 async function instagram(env, caminho, opcoes = {}) {
