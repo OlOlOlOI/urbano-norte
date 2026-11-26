@@ -13,7 +13,10 @@
 // Variável comum (wrangler.toml): PHONE_NUMBER_ID
 //
 // Instagram (opcional — só mensagens diretas):
-//   IG_TOKEN        token do Instagram (API do Instagram com login do Instagram) da conta @ da empresa
+//   IG_TOKEN        token com instagram_manage_messages. Apps novos da Meta usam o "login unificado":
+//                   token de usuário do sistema (não vence) e chamadas em graph.facebook.com
+//   IG_ID           (wrangler.toml) ID da conta do Instagram da empresa — com ele, usa graph.facebook.com/{IG_ID}
+//                   sem ele, usa a API antiga graph.instagram.com/me (login do Instagram)
 //   IG_APP_SECRET   chave secreta do app do Instagram, se for diferente da APP_SECRET (confere a assinatura)
 
 const GRAPH = 'https://graph.facebook.com/v27.0';
@@ -145,7 +148,7 @@ export function lerMensagemInstagram(ev, contato) {
 async function perfilInstagram(env, igsid) {
   if (!env || !env.IG_TOKEN) return {};
   try {
-    const r = await fetch(`${GRAPH_IG}/${igsid}?fields=name,username`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+    const r = await fetch(`${(await idDoInstagram(env)) ? GRAPH : GRAPH_IG}/${igsid}?fields=name,username`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
     const d = await r.json();
     return r.ok ? { nome: d.name || null, usuario: d.username || null } : {};
   } catch { return {}; }
@@ -194,10 +197,30 @@ async function processarInstagram(db, corpo, env) {
   return novas;
 }
 
+// Descobre sozinho o ID da conta do Instagram quando o token é do Facebook (começa com "EAA") e o IG_ID não foi
+// configurado: procura a conta do Instagram ligada às Páginas que o token enxerga. Fica guardado enquanto o servidor roda.
+let igIdDescoberto = null;
+async function idDoInstagram(env) {
+  if (env.IG_ID) return env.IG_ID;
+  if (!String(env.IG_TOKEN || '').startsWith('EAA')) return null; // token do Instagram (IG...): usa graph.instagram.com/me
+  if (igIdDescoberto) return igIdDescoberto;
+  try {
+    const r = await fetch(`${GRAPH}/me/accounts?fields=instagram_business_account{id,username}&limit=50`, { headers: { Authorization: `Bearer ${env.IG_TOKEN}` } });
+    const d = await r.json();
+    const conta = (d.data || []).map((p) => p.instagram_business_account).find(Boolean);
+    if (conta) igIdDescoberto = conta.id;
+  } catch { /* sem rede: tenta na próxima */ }
+  return igIdDescoberto;
+}
+
 async function instagram(env, caminho, opcoes = {}) {
+  // login unificado (apps novos): graph.facebook.com/{IG_ID}/...; login do Instagram (antigo): graph.instagram.com/me/...
+  const igId = await idDoInstagram(env);
+  const base = igId ? GRAPH : GRAPH_IG;
+  const alvo = igId ? caminho.replace(/^me(?=[/?]|$)/, igId) : caminho;
   let r;
   try {
-    r = await fetch(`${GRAPH_IG}/${caminho}`, { ...opcoes, headers: { Authorization: `Bearer ${env.IG_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}) } });
+    r = await fetch(`${base}/${alvo}`, { ...opcoes, headers: { Authorization: `Bearer ${env.IG_TOKEN}`, ...(opcoes.body ? { 'Content-Type': 'application/json' } : {}) } });
   } catch { return { ok: false, erro: 'Sem conexão com o Instagram.' }; }
   let dados = null;
   try { dados = await r.json(); } catch { /* sem JSON */ }
@@ -345,9 +368,10 @@ async function rotaApi(request, env, caminho) {
       });
     }
     if (env.IG_TOKEN) {
-      const eu = await instagram(env, 'me?fields=user_id,username');
-      passos.push({ item: 'Instagram conectado', ok: eu.ok, detalhe: eu.ok ? `@${eu.dados.username}` : eu.erro });
-      if (eu.ok) {
+      const igId = await idDoInstagram(env);
+      const eu = await instagram(env, igId ? 'me?fields=username' : 'me?fields=user_id,username');
+      passos.push({ item: 'Instagram conectado', ok: eu.ok, detalhe: eu.ok ? `@${eu.dados.username}${igId ? ` (conta ${igId})` : ''}` : eu.erro });
+      if (eu.ok && !igId) {
         // a conta do Instagram precisa pedir os avisos de mensagens para este app
         const r = await instagram(env, 'me/subscribed_apps?subscribed_fields=messages,message_reactions,messaging_seen', { method: 'POST' });
         passos.push({ item: 'Instagram manda as mensagens diretas para este app', ok: r.ok, detalhe: r.ok ? 'ligado' : r.erro });

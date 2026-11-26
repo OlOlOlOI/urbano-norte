@@ -153,7 +153,9 @@ function telaPainel() {
     h('aside', { class: 'lado', 'aria-label': 'Conversas' },
       h('div', { class: 'lado-topo' },
         h('div', { class: 'lado-titulo' }, h('h1', {}, 'Atendimento'),
-          h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar')),
+          h('span', {},
+            h('button', { type: 'button', class: 'btn discreto', id: 'btn-atualizar', title: 'Buscar mensagens novas agora (F5)', onclick: atualizarAgora }, '↻ Atualizar'),
+            h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar'))),
         h('div', { class: 'filtros', role: 'group', 'aria-label': 'Mostrar' }, filtros),
         h('div', { class: 'filtros canais', role: 'group', 'aria-label': 'Canal' }, canais),
         busca),
@@ -321,6 +323,16 @@ async function enviar() {
 }
 
 async function recarregarTudo() { await carregarLista(); await carregarMensagens(true); }
+
+async function atualizarAgora() {
+  const b = $('#btn-atualizar');
+  if (b) { b.disabled = true; b.textContent = '↻ Atualizando…'; }
+  await carregarLista();
+  if (S.atual) await carregarMensagens(false);
+  if (b) { b.disabled = false; b.textContent = '↻ Atualizar'; }
+  aviso(`Atualizado às ${hora(Date.now())}.`);
+}
+document.addEventListener('keydown', (e) => { if ((e.key === 'F5' || ((e.metaKey || e.ctrlKey) && e.key === 'r')) && $('#lista')) { e.preventDefault(); atualizarAgora(); } });
 
 /* ---------- início ---------- */
 let relogio = null;

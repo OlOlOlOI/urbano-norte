@@ -320,3 +320,33 @@ test('Instagram sem IG_TOKEN: avisa ao tentar responder', async () => {
   assert.strictEqual(r.status, 503);
   assert.match((await r.json()).erro, /Instagram/);
 });
+
+test('Instagram com login unificado (IG_ID): envia por graph.facebook.com/{IG_ID}/messages', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'SUAT', IG_ID: '17841400000000000' };
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, op = {}) => { chamadas.push(String(url)); return Response.json({ recipient_id: '900', message_id: 'ig.mid.X' }); };
+  try {
+    const r = await (await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) })).json();
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(chamadas[0], 'https://graph.facebook.com/v27.0/17841400000000000/messages');
+  } finally { globalThis.fetch = original; }
+});
+
+test('Instagram com token do Facebook (EAA) e sem IG_ID: descobre a conta pelas Páginas', async () => {
+  const env = { ...ambiente(), IG_TOKEN: 'EAAxyz' };
+  await webhook(env, dmInstagram([dm('900', 'ig.mid.1', { text: 'Oi' })]));
+  const chamadas = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    chamadas.push(String(url));
+    if (String(url).includes('/me/accounts')) return Response.json({ data: [{ id: 'PAGINA', instagram_business_account: { id: '1784199', username: 'urbanorioverde' } }] });
+    return Response.json({ recipient_id: '900', message_id: 'ig.mid.Y' });
+  };
+  try {
+    const r = await (await api(env, '/api/conversas/ig_900/enviar', { method: 'POST', body: JSON.stringify({ texto: 'oi' }) })).json();
+    assert.strictEqual(r.ok, true);
+    assert.ok(chamadas.some((u) => u === 'https://graph.facebook.com/v27.0/1784199/messages'), chamadas.join('\n'));
+  } finally { globalThis.fetch = original; }
+});
