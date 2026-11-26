@@ -105,16 +105,31 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
      * Descobre a conta do WhatsApp Business (WABA) dona deste número, pelas permissões do próprio token.
      * Os modelos de mensagem ficam na conta, não no número.
      */
-    async descobrirConta() {
-      const d = await chamar(`debug_token?input_token=${encodeURIComponent(token)}`);
-      if (!d.ok) return d;
-      const escopos = (d.dados && d.dados.data && d.dados.data.granular_scopes) || [];
-      const ids = [...new Set(escopos.filter((e) => /^whatsapp_business_/.test(e.scope)).flatMap((e) => e.target_ids || []))];
-      for (const id of ids) {
+    async descobrirConta(candidatas = []) {
+      // Procura em vários lugares, porque o token do usuário do sistema nem sempre lista as contas no debug_token.
+      const tentadas = new Set();
+      let primeiroErro = '';
+      const temONumero = async (id) => {
+        if (!id || tentadas.has(String(id))) return false;
+        tentadas.add(String(id));
         const n = await chamar(`${id}/phone_numbers?fields=id`);
-        if (n.ok && (n.dados.data || []).some((x) => String(x.id) === String(numeroId))) return { ok: true, conta: String(id) };
+        if (!n.ok && !primeiroErro) primeiroErro = n.erro || '';
+        return n.ok && (n.dados.data || []).some((x) => String(x.id) === String(numeroId));
+      };
+      for (const id of candidatas) if (await temONumero(id)) return { ok: true, conta: String(id) };
+      const d = await chamar(`debug_token?input_token=${encodeURIComponent(token)}`);
+      const escopos = (d.ok && d.dados && d.dados.data && d.dados.data.granular_scopes) || [];
+      for (const id of new Set(escopos.filter((e) => /^whatsapp_business_/.test(e.scope)).flatMap((e) => e.target_ids || []))) {
+        if (await temONumero(id)) return { ok: true, conta: String(id) };
       }
-      return { ok: false, erro: 'Não achei a conta do WhatsApp deste número nas permissões do token. Confira se o usuário do sistema tem acesso à conta "Urbano Norte Rio Verde".' };
+      const empresas = await chamar('me/businesses?fields=id');
+      for (const e of (empresas.ok && empresas.dados.data) || []) {
+        for (const tipo of ['owned_whatsapp_business_accounts', 'client_whatsapp_business_accounts']) {
+          const c = await chamar(`${e.id}/${tipo}?fields=id`);
+          for (const x of (c.ok && c.dados.data) || []) if (await temONumero(x.id)) return { ok: true, conta: String(x.id) };
+        }
+      }
+      return { ok: false, erro: `Não achei a conta do WhatsApp deste número nas permissões do token. Confira se o usuário do sistema tem acesso à conta "Urbano Norte Rio Verde".${primeiroErro ? ` (Meta: ${primeiroErro})` : ''}` };
     },
 
     /** Modelos da conta, com situação (APPROVED, PENDING, REJECTED...). */

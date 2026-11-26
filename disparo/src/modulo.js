@@ -47,10 +47,13 @@ function provedorMeta() {
 function modoReal() { const w = lerWhats(); return Boolean(lerLocal().envioReal && w.numeroId && w.token); }
 
 /** Conta do WhatsApp (onde ficam os modelos). Descobre uma vez e guarda junto das credenciais. */
+// Conta (WABA) "Urbano Norte Rio Verde", dona do +55 64 99905-1127. Testada primeiro; as outras são procuradas pelo token.
+const WABAS_CONHECIDAS = ['1789237192189564'];
+
 async function contaWhats() {
   const w = lerWhats();
   if (w.waba) return w.waba;
-  const r = await provedorMeta().descobrirConta();
+  const r = await provedorMeta().descobrirConta(WABAS_CONHECIDAS);
   if (!r.ok) throw new Error(r.erro);
   gravarWhats({ ...w, waba: r.conta });
   return r.conta;
