@@ -398,7 +398,7 @@ async function rotaApi(request, env, caminho) {
         } else {
           const r = await fetch(`${GRAPH}/${pagina.id}/subscribed_apps?subscribed_fields=messages,message_reactions,message_reads`, { method: 'POST', headers: { Authorization: `Bearer ${pagina.access_token}` } }).then((x) => x.json()).catch(() => null);
           const ok = Boolean(r && r.success);
-          passos.push({ item: 'Página do Facebook manda as DMs do Instagram para este app', ok, detalhe: ok ? `ligada: ${pagina.name}` : (r && r.error ? explicar(r.error) + (r.error.code === 200 || r.error.code === 10 ? ' — o token precisa da permissão pages_manage_metadata.' : '') : 'não consegui ligar') });
+          passos.push({ item: 'Página do Facebook manda as DMs do Instagram para este app', ok, detalhe: ok ? `ligada: ${pagina.name}` : (r && r.error ? explicar(r.error) + (/permission/i.test(r.error.message || '') ? ' — gere o token do usuário do sistema de novo marcando a permissão citada.' : '') : 'não consegui ligar') });
         }
       }
       if (eu.ok && !igId) {
