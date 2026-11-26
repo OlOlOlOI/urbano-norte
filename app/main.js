@@ -6,6 +6,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, Menu, shell } = require('e
 const path = require('path');
 const fs = require('fs');
 const { migrar } = require('./migracao');
+const { iniciarAtualizacao } = require('./atualizacao');
 
 // Para testes: guardar os dados em outra pasta, sem mexer nos dados reais deste computador.
 if (process.env.URBANO_PASTA_DADOS) app.setPath('userData', process.env.URBANO_PASTA_DADOS);
@@ -135,6 +136,7 @@ app.whenReady().then(() => {
     },
   });
   criarJanela();
+  iniciarAtualizacao(janelaViva);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) criarJanela(); });
 });
 

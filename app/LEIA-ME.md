@@ -34,4 +34,22 @@ Para sorteios feitos no app novo isso não muda nada.
 - `npm start` — abre o app.
 - `npm test` — testes da migração.
 - `npm run test:visual` — abre o app com dados temporários, confere as abas e o modo vertical e salva capturas de tela.
-- Instaladores: aba **Actions → App unificado (desktop) - gerar instaladores**, ou uma tag `app-v*`.
+- Instaladores: aba **Actions → App unificado (desktop) - gerar instaladores** (rascunho para teste), ou uma tag `app-v*` (versão oficial).
+
+## Distribuir e atualizar (Windows)
+
+O app instalado no Windows se atualiza sozinho (`atualizacao.js`, com `electron-updater`): ao abrir e a cada hora ele consulta
+a release fixa **app-latest** do GitHub; se houver versão nova, baixa em segundo plano e pergunta se pode reiniciar
+("Depois" instala ao fechar o app). O **portátil** e o **Mac** não se atualizam sozinhos (no Mac exigiria certificado pago da Apple).
+
+Para lançar uma versão:
+1. Suba o número em `app/package.json` (`version`, ex.: 1.1.0 → 1.1.1), faça commit e push.
+2. Crie e envie a tag igual: `git tag app-v1.1.1 && git push origin app-v1.1.1`.
+3. O workflow gera os instaladores, publica a release `app-v1.1.1` e troca os arquivos da release `app-latest`.
+   Em até uma hora os computadores com o app aberto baixam a versão nova.
+
+Não apague a release `app-latest`. Se a tag não bater com a versão do `package.json`, o workflow para com erro.
+
+Primeira instalação num computador novo: baixe `Urbano-Norte-Instalador-<versão>.exe` da release mais recente `app-v*`
+(no Windows, "O Windows protegeu o computador" → **Mais informações → Executar assim mesmo**, porque o app não tem certificado pago).
+Depois, configure em cada computador: Atendimento (endereço do servidor + CHAVE_APP + nome) e Disparo (pasta compartilhada + nome).

@@ -1,7 +1,7 @@
 {
   "name": "urbano-norte",
   "productName": "Urbano Norte",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sistemas da Urbano Norte em um app só: sorteio e disparo de mensagens",
   "main": "main.js",
   "author": "Urbano Norte",
@@ -17,6 +17,7 @@
     "test:visual": "npm run montar && electron test/captura.js"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "exceljs": "^4.4.0",
     "xlsx": "^0.18.5"
   },
@@ -29,6 +30,7 @@
     "productName": "Urbano Norte",
     "files": [
       "main.js",
+      "atualizacao.js",
       "migracao.js",
       "shell/**/*",
       "modulos/**/*",
@@ -76,6 +78,12 @@
       "artifactName": "Urbano-Norte-${version}-${arch}.${ext}",
       "icon": "build/icon.png"
     },
-    "afterSign": "scripts/adhoc-sign.js"
+    "afterSign": "scripts/adhoc-sign.js",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/OlOlOlOI/urbano-norte/releases/download/app-latest"
+      }
+    ]
   }
 }

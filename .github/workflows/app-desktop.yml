@@ -22,6 +22,15 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - name: Conferir se a tag bate com a versão do package.json
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        shell: bash
+        run: |
+          versao="$(node -p "require('./package.json').version")"
+          if [ "app-v$versao" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::A tag $GITHUB_REF_NAME não bate com a versão $versao do app/package.json. Mude a versão e crie a tag app-v$versao."
+            exit 1
+          fi
       - run: npm ci
       - run: npm test
       - name: Testes do servidor do Atendimento
@@ -42,6 +51,8 @@ jobs:
           name: urbano-norte-${{ matrix.os }}
           path: |
             app/dist/*.exe
+            app/dist/*.exe.blockmap
+            app/dist/latest.yml
             app/dist/*.dmg
 
   publicar:
@@ -54,7 +65,10 @@ jobs:
         with:
           path: instaladores
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      # Rodada manual (sem tag): só um rascunho para baixar e testar.
+      - name: Rascunho (rodada manual)
+        if: "!startsWith(github.ref, 'refs/tags/app-v')"
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: app-build-${{ github.run_number }}
           name: Urbano Norte - instaladores (build ${{ github.run_number }})
@@ -62,3 +76,27 @@ jobs:
           files: |
             instaladores/*.exe
             instaladores/*.dmg
+      # Tag app-vX.Y.Z: versão oficial, com os instaladores para baixar...
+      - name: Versão oficial
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Urbano Norte ${{ github.ref_name }}
+          make_latest: false
+          files: |
+            instaladores/*.exe
+            instaladores/*.dmg
+      # ...e o endereço fixo que os apps instalados no Windows consultam para se atualizar (atualizacao.js).
+      - name: Endereço de atualização (app-latest)
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          name: Urbano Norte - atualização automática (não apagar)
+          body: Arquivos que os apps instalados no Windows consultam para se atualizar sozinhos. Trocados a cada versão app-v*. Não apague esta release.
+          make_latest: false
+          files: |
+            instaladores/latest.yml
+            instaladores/Urbano-Norte-Instalador-*.exe
+            instaladores/Urbano-Norte-Instalador-*.exe.blockmap
