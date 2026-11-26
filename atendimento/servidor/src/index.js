@@ -26,6 +26,8 @@ const GRAPH = 'https://graph.facebook.com/v27.0';
 const GRAPH_IG = 'https://graph.instagram.com/v27.0';
 const ehInstagram = (contato) => String(contato).startsWith('ig_');
 const JANELA_MS = 24 * 60 * 60 * 1000;
+// Os arquivos da Meta (lookaside.fbsbx.com) exigem um navegador conhecido; sem isso devolvem uma página de erro.
+const NAVEGADOR = 'Mozilla/5.0 (compatible; AtendimentoUrbanoNorte/1.0)';
 // Conversas resolvidas somem da lista depois deste tempo sem novidade (continuam no banco: a busca acha, e se o cliente escrever de novo ela volta)
 const ESCONDER_RESOLVIDAS_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -634,8 +636,9 @@ async function rotaAtendimento(request, env, caminho, conta) {
     const existe = await db.prepare('SELECT midia_mime, midia_url FROM mensagens WHERE midia_id = ?').bind(midiaId).first();
     if (!existe) return erro(404, 'Mídia não encontrada.');
     if (existe.midia_url) {
-      const arq = await fetch(existe.midia_url);
-      if (!arq.ok) return erro(502, 'O Instagram não entregou o arquivo (ele pode ter expirado).');
+      // sem User-Agent, o CDN da Meta redireciona para facebook.com/unsupportedbrowser (uma página, não o arquivo)
+      const arq = await fetch(existe.midia_url, { headers: { 'User-Agent': NAVEGADOR } });
+      if (!arq.ok || /^text\/html/i.test(arq.headers.get('Content-Type') || '')) return erro(502, 'O Instagram não entregou o arquivo (ele pode ter expirado).');
       // o CDN do Instagram às vezes manda áudio/foto como "octet-stream" ou texto: vale mais o tipo que a mensagem informou
       const doCdn = String(arq.headers.get('Content-Type') || '');
       const generico = !doCdn || /octet-stream|^text\/|^binary\//i.test(doCdn);
@@ -643,8 +646,8 @@ async function rotaAtendimento(request, env, caminho, conta) {
     }
     const info = await graph(env, midiaId);
     if (!info.ok) return erro(502, info.erro);
-    const arquivo = await fetch(info.dados.url, { headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } });
-    if (!arquivo.ok) return erro(502, 'A Meta não entregou o arquivo (ele pode ter expirado).');
+    const arquivo = await fetch(info.dados.url, { headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'User-Agent': NAVEGADOR } });
+    if (!arquivo.ok || /^text\/html/i.test(arquivo.headers.get('Content-Type') || '')) return erro(502, 'A Meta não entregou o arquivo (ele pode ter expirado).');
     return new Response(arquivo.body, { headers: { 'Content-Type': info.dados.mime_type || existe.midia_mime || 'application/octet-stream', 'Cache-Control': 'no-store' } });
   }
 

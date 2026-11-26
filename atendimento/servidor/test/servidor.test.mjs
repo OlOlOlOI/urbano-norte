@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';
-import servidor, { lerMensagemMeta } from '../src/index.js';
+import servidor, { lerMensagemMeta, processarWebhook } from '../src/index.js';
 
 const { D1Local } = createRequire(import.meta.url)('../d1-local.cjs');
 const SEGREDO = 'segredo-do-app';
@@ -594,4 +594,22 @@ test('equipe manda foto e PDF pelo WhatsApp: sobe para a Meta, envia e aparece n
   } finally { globalThis.fetch = original; }
   const conv = (await (await api(env, '/api/conversas')).json()).conversas[0];
   assert.strictEqual(conv.previa, '📄 Documento');
+});
+
+test('arquivo do Instagram: pede com User-Agent (sem ele a Meta manda uma página) e recusa página no lugar do arquivo', async () => {
+  const env = ambiente();
+  await processarWebhook(env.DB, { object: 'instagram', entry: [{ id: '1', messaging: [{ sender: { id: '77' }, recipient: { id: '1' }, timestamp: Date.now(), message: { mid: 'ig.mid.UA1', attachments: [{ type: 'image', payload: { url: 'https://lookaside.exemplo/foto' } }] } }] }] }, env);
+  const midiaId = env.DB.db.prepare("SELECT midia_id FROM mensagens WHERE id = 'ig.mid.UA1'").get().midia_id;
+  const original = globalThis.fetch;
+  const pedidos = [];
+  let resposta = () => new Response(new Uint8Array([0xff, 0xd8, 0xff, 1]), { headers: { 'Content-Type': 'application/octet-stream' } });
+  globalThis.fetch = async (url, op = {}) => { pedidos.push(op.headers || {}); return resposta(); };
+  try {
+    const r = await api(env, `/api/midia/${midiaId}`);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers.get('Content-Type'), 'image/jpeg');
+    assert.match(pedidos[0]['User-Agent'], /Mozilla/);
+    resposta = () => new Response('<html>navegador não suportado</html>', { headers: { 'Content-Type': 'text/html; charset="utf-8"' } });
+    assert.strictEqual((await api(env, `/api/midia/${midiaId}`)).status, 502);
+  } finally { globalThis.fetch = original; }
 });
