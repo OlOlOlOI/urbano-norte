@@ -192,6 +192,21 @@ function infoJanela(c) {
   return { aberta: true, texto: horas >= 1 ? `Pode responder até ${quando(fim) === hora(fim) ? hora(fim) : `${quando(fim)} ${hora(fim)}`}` : `Janela fecha em ${Math.max(1, Math.round(resta / 60000))} min` };
 }
 
+/* Transforma endereços https:// do texto em links (abrem no navegador do computador). */
+function comLinks(texto) {
+  const partes = [];
+  let ultimo = 0;
+  for (const achado of String(texto).matchAll(/https:\/\/[^\s<>"]+/g)) {
+    if (achado.index > ultimo) partes.push(texto.slice(ultimo, achado.index));
+    const url = achado[0];
+    const curto = url.length > 60 ? url.slice(0, 57) + '…' : url;
+    partes.push(h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', title: url }, curto));
+    ultimo = achado.index + url.length;
+  }
+  if (ultimo < texto.length) partes.push(texto.slice(ultimo));
+  return partes;
+}
+
 function bolha(m) {
   const saida = m.direcao === 'saida';
   const filhos = [];
@@ -199,22 +214,24 @@ function bolha(m) {
   if (m.midia_id) {
     const imagem = (m.midia_mime || '').startsWith('image/') || m.tipo === 'image' || m.tipo === 'sticker';
     const audio = m.tipo === 'audio' || (m.midia_mime || '').startsWith('audio/');
-    const naTela = imagem || audio;
+    const story = m.tipo === 'story_mention';
+    const naTela = imagem || audio || story; // Story: foto aparece aqui; vídeo abre no programa do computador
     const ja = S.midias.get(m.midia_id);
-    if (imagem && ja) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja) })));
-    else if (audio && ja) filhos.push(h('div', { class: 'midia' }, h('audio', { src: ja, controls: true, preload: 'metadata', 'aria-label': 'Áudio do cliente' })));
+    if (ja && ja.startsWith('data:image')) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja) })));
+    else if (ja && ja.startsWith('data:audio')) filhos.push(h('div', { class: 'midia' }, h('audio', { src: ja, controls: true, preload: 'metadata', 'aria-label': 'Áudio do cliente' })));
     else {
-      const rotulo = { image: '📷 Foto', sticker: 'Figurinha', audio: '🎤 Áudio', video: '🎬 Vídeo', document: `📄 ${m.midia_nome || 'Documento'}` }[m.tipo] || '📎 Arquivo';
+      const rotulo = story ? '📣 Story' : { image: '📷 Foto', sticker: 'Figurinha', audio: '🎤 Áudio', video: '🎬 Vídeo', document: `📄 ${m.midia_nome || 'Documento'}` }[m.tipo] || '📎 Arquivo';
+      const textoBotao = imagem ? 'Ver foto' : audio ? '▶ Ouvir' : story ? 'Ver Story' : 'Abrir';
       const botao = h('button', { type: 'button', class: 'btn', onclick: async () => {
         botao.disabled = true; botao.textContent = 'Baixando…';
         const r = await chamar(window.api.midia({ midiaId: m.midia_id, nome: m.midia_nome, abrir: !naTela }));
-        botao.disabled = false; botao.textContent = imagem ? 'Ver foto' : audio ? '▶ Ouvir' : 'Abrir';
+        botao.disabled = false; botao.textContent = textoBotao;
         if (r && r.dataUrl) { S.midias.set(m.midia_id, r.dataUrl); desenharMensagens(false); }
-      } }, imagem ? 'Ver foto' : audio ? '▶ Ouvir' : 'Abrir');
+      } }, textoBotao);
       filhos.push(h('div', { class: 'midia' }, rotulo, botao));
     }
   }
-  if (m.texto) filhos.push(h('div', {}, m.texto));
+  if (m.texto) filhos.push(h('div', {}, comLinks(story ? '📣 ' + m.texto : m.texto)));
   if (!m.texto && !m.midia_id) filhos.push(h('div', { class: 'item-previa' }, `(mensagem do tipo "${m.tipo}" — abra no celular do cliente para ver)`));
   const tique = saida ? { enviada: ['✓', 'Enviada'], entregue: ['✓✓', 'Entregue'], lida: ['✓✓', 'Lida'], falhou: ['⚠', 'Não entregue'] }[m.status] : null;
   filhos.push(h('div', { class: 'meta' }, hora(m.criada_em),

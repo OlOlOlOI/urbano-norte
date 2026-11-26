@@ -296,7 +296,8 @@ test('Instagram: áudio, foto, menção no Story e resposta ao Story', async () 
   assert.strictEqual(por['ig.mid.A'].tipo, 'audio');
   assert.strictEqual(por['ig.mid.A'].midia_url, 'https://cdn.exemplo/audio.mp4');
   assert.strictEqual(por['ig.mid.F'].tipo, 'image');
-  assert.match(por['ig.mid.S'].texto, /Mencionou vocês no Story/);
+  assert.strictEqual(por['ig.mid.S'].texto, 'Mencionou vocês no Story');
+  assert.strictEqual(por['ig.mid.S'].midia_url, 'https://cdn.exemplo/story');
   assert.strictEqual(por['ig.mid.R'].texto, '↩ Respondeu ao seu Story: Que legal!');
   // o app baixa o áudio pelo servidor (link direto do Instagram)
   const original = globalThis.fetch;

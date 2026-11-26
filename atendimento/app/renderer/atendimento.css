@@ -121,3 +121,5 @@ dialog img { max-width: 80vw; max-height: 75vh; display: block; border-radius: 1
 .canal.ig { background: linear-gradient(45deg, #f9ce34, #ee2a7b 55%, #6228d7); }
 .filtros.canais button[aria-pressed="true"] { background: var(--verde-escuro); border-color: var(--verde-escuro); }
 .midia audio { width: 280px; max-width: 100%; height: 40px; }
+
+.bolha a { color: var(--verde-escuro); word-break: break-all; }

@@ -137,7 +137,10 @@ export function lerMensagemInstagram(ev, contato) {
   let midia = null;
   if (anexo) {
     const url = anexo.payload && anexo.payload.url;
-    if (tipo === 'story_mention') texto = texto || 'Mencionou vocês no Story' + (url ? ` — ${url}` : '');
+    if (tipo === 'story_mention') {
+      texto = texto || 'Mencionou vocês no Story';
+      if (url) midia = { id: `${m.mid}_0`.replace(/[^\w-]/g, '').slice(-120), url, mime: null, nome: null };
+    }
     else if (tipo === 'share') texto = [texto, url].filter(Boolean).join(' ') || null;
     else if (url) midia = { id: `${m.mid}_0`.replace(/[^\w-]/g, '').slice(-120), url, mime: { image: 'image/jpeg', audio: 'audio/mp4', video: 'video/mp4' }[tipo] || null, nome: null };
   }
