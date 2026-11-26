@@ -94,9 +94,43 @@ function criarProvedorMeta({ numeroId, token, fetch: buscar = globalThis.fetch }
     /** Texto livre (só chega dentro da janela de 24 h). */
     enviar: ({ telefone, texto }) => mensagem(telefone, { type: 'text', text: { preview_url: false, body: String(texto || '') } }),
 
-    /** Modelo aprovado pela Meta (ex.: hello_world, idioma en_US). */
-    enviarModelo: ({ telefone, modelo, idioma = 'pt_BR' }) =>
-      mensagem(telefone, { type: 'template', template: { name: modelo, language: { code: idioma } } }),
+    /** Modelo aprovado pela Meta (ex.: hello_world, idioma en_US). `parametros` preenche {{1}}, {{2}}... do corpo. */
+    enviarModelo: ({ telefone, modelo, idioma = 'pt_BR', parametros = [] }) =>
+      mensagem(telefone, { type: 'template', template: {
+        name: modelo, language: { code: idioma },
+        ...(parametros.length ? { components: [{ type: 'body', parameters: parametros.map((t) => ({ type: 'text', text: String(t) })) }] } : {}),
+      } }),
+
+    /**
+     * Descobre a conta do WhatsApp Business (WABA) dona deste número, pelas permissões do próprio token.
+     * Os modelos de mensagem ficam na conta, não no número.
+     */
+    async descobrirConta() {
+      const d = await chamar(`debug_token?input_token=${encodeURIComponent(token)}`);
+      if (!d.ok) return d;
+      const escopos = (d.dados && d.dados.data && d.dados.data.granular_scopes) || [];
+      const ids = [...new Set(escopos.filter((e) => /^whatsapp_business_/.test(e.scope)).flatMap((e) => e.target_ids || []))];
+      for (const id of ids) {
+        const n = await chamar(`${id}/phone_numbers?fields=id`);
+        if (n.ok && (n.dados.data || []).some((x) => String(x.id) === String(numeroId))) return { ok: true, conta: String(id) };
+      }
+      return { ok: false, erro: 'Não achei a conta do WhatsApp deste número nas permissões do token. Confira se o usuário do sistema tem acesso à conta "Urbano Norte Rio Verde".' };
+    },
+
+    /** Modelos da conta, com situação (APPROVED, PENDING, REJECTED...). */
+    async listarModelos(conta) {
+      const r = await chamar(`${conta}/message_templates?fields=name,status,category,language,rejected_reason&limit=200`);
+      if (!r.ok) return r;
+      return { ok: true, modelos: (r.dados.data || []).map((m) => ({ nome: m.name, status: m.status, categoria: m.category, idioma: m.language, motivo: m.rejected_reason })) };
+    },
+
+    /** Envia um modelo novo para aprovação. `texto` já no formato da Meta ({{1}}), `exemplos` um por variável. */
+    async criarModelo(conta, { nome, categoria, idioma = 'pt_BR', texto, exemplos = [] }) {
+      const corpo = { type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) };
+      const r = await chamar(`${conta}/message_templates`, { metodo: 'POST', corpo: { name: nome, category: categoria, language: idioma, components: [corpo] } });
+      if (!r.ok) return r;
+      return { ok: true, id: r.dados.id, status: r.dados.status, categoria: r.dados.category };
+    },
 
     /** Confere token e número: devolve o número exibido e o nome verificado. */
     async conferir() {

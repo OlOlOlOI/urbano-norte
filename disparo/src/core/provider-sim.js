@@ -17,6 +17,10 @@ function criarProvedorSimulacao({ atrasoMs = 0 } = {}) {
       if (atrasoMs) await new Promise((r) => setTimeout(r, atrasoMs));
       return { ok: true };
     },
+    async enviarModelo() {
+      if (atrasoMs) await new Promise((r) => setTimeout(r, atrasoMs));
+      return { ok: true };
+    },
   };
 }
 

@@ -214,3 +214,10 @@ summary::-webkit-details-marker { display: none; }
 summary::before { content: ""; width: 0; height: 0; border-left: 8px solid currentColor; border-top: 6px solid transparent; border-bottom: 6px solid transparent; transition: transform .15s; }
 details[open] > summary::before { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
+
+/* ---------- aprovação na Meta ---------- */
+.selo-meta { display: inline-block; margin-top: 6px; font-size: 0.85rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; background: var(--fundo); color: var(--tinta-2); border: 1px solid var(--linha); }
+.selo-meta.aprovado { background: var(--verde-claro); color: var(--verde-escuro); border-color: var(--verde-escuro); }
+.selo-meta.analise, .selo-meta.mudou { background: var(--aviso-fundo); color: var(--aviso-texto); border-color: var(--aviso-texto); }
+.selo-meta.recusado, .selo-meta.pausado { background: var(--erro-fundo); color: var(--erro-texto); border-color: var(--erro-texto); }
+.botoes-opcao { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

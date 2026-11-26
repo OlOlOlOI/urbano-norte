@@ -121,8 +121,8 @@ app.whenReady().then(async () => {
     const ultima = await ta.executeJavaScript("(() => { const b = [...document.querySelectorAll('.bolha.saida')].pop(); return b ? b.textContent : ''; })()");
     conferir('atendimento: resposta enviada aparece com o nome de quem respondeu', /Rayan/.test(ultima) && /guardou sua bolsa/.test(ultima), ultima.slice(0, 80));
     await simular({ de: '556492937604', nome: 'Ana Paula', texto: 'Muito obrigada!! 🙏' });
-    await espera(5500);
-    const chegou = await ta.executeJavaScript("[...document.querySelectorAll('.bolha.entrada')].some(b => b.textContent.includes('Muito obrigada'))");
+    let chegou = false; // a tela confere o servidor a cada 4 s: espera até 10 s
+    for (let i = 0; i < 20 && !chegou; i++) { await espera(500); chegou = await ta.executeJavaScript("[...document.querySelectorAll('.bolha.entrada')].some(b => b.textContent.includes('Muito obrigada'))"); }
     conferir('atendimento: mensagem nova do cliente aparece sozinha na conversa aberta', chegou);
     await capturar('5-atendimento-conversa');
     await ta.executeJavaScript("document.querySelector('.conversa-topo .btn-icone').click()");

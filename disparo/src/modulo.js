@@ -16,6 +16,7 @@ const { executarCampanha } = require('./core/sender');
 const { adivinharColunas, colunasFaltando } = require('./core/columns');
 const { criarProvedorSimulacao } = require('./core/provider-sim');
 const { criarProvedorMeta } = require('./core/provider-meta');
+const { paraModeloMeta, nomeTecnico, mesmoTexto, situacao, CATEGORIAS } = require('./core/modelo-meta');
 
 // ---------- configuração local (por computador) ----------
 let pastaDados = () => app.getPath('userData');
@@ -40,6 +41,42 @@ function provedorMeta() {
   const w = lerWhats();
   if (!w.numeroId || !w.token) throw new Error('Configure o WhatsApp em Configurações primeiro.');
   return criarProvedorMeta({ numeroId: w.numeroId, token: w.token });
+}
+
+/** Envio real só quando este computador ligou o modo real E o WhatsApp está configurado. */
+function modoReal() { const w = lerWhats(); return Boolean(lerLocal().envioReal && w.numeroId && w.token); }
+
+/** Conta do WhatsApp (onde ficam os modelos). Descobre uma vez e guarda junto das credenciais. */
+async function contaWhats() {
+  const w = lerWhats();
+  if (w.waba) return w.waba;
+  const r = await provedorMeta().descobrirConta();
+  if (!r.ok) throw new Error(r.erro);
+  gravarWhats({ ...w, waba: r.conta });
+  return r.conta;
+}
+
+/** Atualiza a situação (aprovada, em análise...) das mensagens que já foram para a Meta. */
+async function atualizarSituacaoMeta() {
+  if (!estado) return [];
+  const modelos = estado.lerConfig().modelos || [];
+  if (!modelos.some((m) => m.meta && m.meta.nome)) return modelos;
+  const r = await provedorMeta().listarModelos(await contaWhats());
+  if (!r.ok) throw new Error(r.erro);
+  const porNome = new Map(r.modelos.map((m) => [m.nome, m]));
+  let mudou = false;
+  const novos = modelos.map((m) => {
+    if (!m.meta || !m.meta.nome) return m;
+    const x = porNome.get(m.meta.nome);
+    const status = x ? x.status : 'DELETED';
+    const motivo = x ? x.motivo : 'apagado na Meta';
+    const categoria = (x && x.categoria) || m.meta.categoria;
+    if (status === m.meta.status && motivo === m.meta.motivo && categoria === m.meta.categoria) return m;
+    mudou = true;
+    return { ...m, meta: { ...m.meta, status, motivo, categoria } };
+  });
+  if (mudou) estado.gravarConfig({ modelos: novos });
+  return novos;
 }
 
 let janela = () => null;   // janela dona dos diálogos
@@ -151,7 +188,7 @@ function registrarIpc() {
   h('ajustes:ler', () => {
     const l = lerLocal();
     const cfg = estado ? estado.lerConfig() : {};
-    return { pasta: l.pasta || '', operador: l.operador || '', pronto: Boolean(estado), simulacao: true, limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: cfg.intervaloMs ?? 1000, versao: app.getVersion() };
+    return { pasta: l.pasta || '', operador: l.operador || '', pronto: Boolean(estado), simulacao: !modoReal(), querReal: Boolean(l.envioReal), limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: cfg.intervaloMs ?? 1000, versao: app.getVersion() };
   });
   h('ajustes:escolherPasta', async () => {
     const r = await dialog.showOpenDialog(janela() || undefined, { properties: ['openDirectory', 'createDirectory'], title: 'Pasta compartilhada (Drive, OneDrive...)' });
@@ -202,6 +239,32 @@ function registrarIpc() {
   h('planilha:salvarMapa', (mapa) => { estado.gravarConfig({ mapa }); return true; });
 
   h('modelos:salvar', (modelos) => { estado.gravarConfig({ modelos }); return true; });
+  h('modelos:situacao', async () => ({ modelos: await atualizarSituacaoMeta(), categorias: CATEGORIAS }));
+  h('modelos:enviarMeta', async ({ id, categoria }) => {
+    if (!estado) throw new Error('Configure a pasta compartilhada primeiro.');
+    if (!CATEGORIAS[categoria]) throw new Error('Escolha o tipo da mensagem.');
+    const modelos = estado.lerConfig().modelos || [];
+    const m = modelos.find((x) => x.id === id);
+    if (!m) throw new Error('Mensagem não encontrada. Ela pode ter sido apagada em outro computador.');
+    const conv = paraModeloMeta(m.corpo);
+    if (!conv.ok) throw new Error(conv.erro);
+    const nome = nomeTecnico(m.nome);
+    const r = await provedorMeta().criarModelo(await contaWhats(), { nome, categoria, idioma: 'pt_BR', texto: conv.texto, exemplos: conv.exemplos });
+    if (!r.ok) throw new Error(r.erro);
+    const meta = { nome, idioma: 'pt_BR', texto: conv.texto, corpoEnviado: m.corpo, categoria: r.categoria || categoria, status: r.status || 'PENDING', id: r.id, enviadoEm: new Date().toISOString(), por: estado.operador };
+    // relê antes de gravar: outro computador pode ter mexido na lista enquanto a Meta respondia
+    const atuais = estado.lerConfig().modelos || [];
+    estado.gravarConfig({ modelos: atuais.map((x) => (x.id === id ? { ...x, meta } : x)) });
+    return { meta, situacao: situacao(meta, m.corpo) };
+  });
+  h('ajustes:modoReal', async (ligar) => {
+    if (ligar) {
+      const w = lerWhats();
+      if (!w.numeroId || !w.token) throw new Error('Configure o WhatsApp (ID do número e token) antes de ligar o envio real.');
+    }
+    gravarLocal({ envioReal: Boolean(ligar) });
+    return { simulacao: !modoReal() };
+  });
 
   h('publico:calcular', ({ campanha }) => {
     const r = publico(campanha ? slug(campanha) : '', true);
@@ -210,13 +273,22 @@ function registrarIpc() {
 
   h('envio:previa', ({ corpo, nome }) => renderizar(corpo, { nome }));
 
-  h('envio:iniciar', async ({ campanha, corpo }) => {
+  h('envio:iniciar', async ({ campanha, corpo, modeloId }) => {
     if (envioAtual) throw new Error('Já existe um envio em andamento.');
     if (!estado) throw new Error('Configure a pasta compartilhada primeiro.');
     const id = slug(campanha);
     if (!campanha.trim()) throw new Error('Dê um nome à campanha.');
     if (!String(corpo || '').trim()) throw new Error('Escreva a mensagem.');
-    const provedor = criarProvedorSimulacao({ atrasoMs: 0 });
+    const real = modoReal();
+    let modeloMeta = null;
+    if (real) {
+      const m = (estado.lerConfig().modelos || []).find((x) => x.id === modeloId);
+      if (!m || m.corpo !== corpo) throw new Error('A mensagem mudou. Volte ao passo 1 e escolha de novo.');
+      const sit = situacao(m.meta, m.corpo);
+      if (sit.codigo !== 'aprovado') throw new Error(`Esta mensagem não pode ir no envio real: ${sit.texto.toLowerCase()}.`);
+      modeloMeta = { nome: m.meta.nome, idioma: m.meta.idioma || 'pt_BR' };
+    }
+    const provedor = real ? provedorMeta() : criarProvedorSimulacao({ atrasoMs: 0 });
     const { destinatarios } = publico(id, provedor.simulacao);
     if (!destinatarios.length) throw new Error('Não há destinatários aptos para esta campanha.');
     const cfg = estado.lerConfig();
@@ -224,7 +296,7 @@ function registrarIpc() {
     envioAtual = { sinal };
     // roda em segundo plano; o progresso volta por evento
     executarCampanha({
-      destinatarios, corpo, campanha: id, provedor, estado, sinal,
+      destinatarios, corpo, campanha: id, provedor, estado, sinal, modeloMeta,
       limiteDiario: cfg.limiteDiario ?? 250, intervaloMs: provedor.simulacao ? 40 : (cfg.intervaloMs ?? 1000),
       aoProgredir: (p) => avisar('envio:progresso', p),
     }).then((resumo) => avisar('envio:fim', resumo))
@@ -269,16 +341,24 @@ function registrarIpc() {
     const c = await criarProvedorMeta({ numeroId: id, token: tok }).conferir();
     if (!c.ok) throw new Error(c.erro);
     const conta = { numero: c.numero, nome: c.nome, conferidoEm: new Date().toISOString() };
-    gravarWhats({ numeroId: id, token: tok, meuNumero: tel.e164, conta });
+    gravarWhats({ numeroId: id, token: tok, meuNumero: tel.e164, conta, ...(atual.numeroId === id && atual.waba ? { waba: atual.waba } : {}) });
     return conta;
   });
   h('whatsapp:apagar', () => { fs.rmSync(arqWhats(), { force: true }); return true; });
-  h('whatsapp:teste', async ({ tipo, texto }) => {
+  h('whatsapp:teste', async ({ tipo, texto, modeloId }) => {
     const w = lerWhats();
     if (!w.meuNumero) throw new Error('Salve o seu número primeiro.');
     const p = provedorMeta();
     // só para o número da própria pessoa: este botão nunca envia para a planilha
-    const r = tipo === 'modelo'
+    let r;
+    if (tipo === 'modeloDisparo') {
+      // a mensagem aprovada, como a planilha vai receber, com o primeiro nome de quem está testando
+      const m = ((estado && estado.lerConfig().modelos) || []).find((x) => x.id === modeloId);
+      if (!m || situacao(m.meta, m.corpo).codigo !== 'aprovado') throw new Error('Esta mensagem ainda não foi aprovada pela Meta.');
+      const { parametrosPara } = require('./core/modelo-meta');
+      const primeiro = String((estado && estado.operador) || '').split(' ')[0];
+      r = await p.enviarModelo({ telefone: w.meuNumero, modelo: m.meta.nome, idioma: m.meta.idioma || 'pt_BR', parametros: parametrosPara(m.corpo, { nome: primeiro }) });
+    } else r = tipo === 'modelo'
       ? await p.enviarModelo({ telefone: w.meuNumero, modelo: 'hello_world', idioma: 'en_US' })
       : await p.enviar({ telefone: w.meuNumero, texto: String(texto || '').slice(0, 4096) || 'Teste do Disparo Urbano Norte ✅' });
     if (!r.ok) throw new Error(r.erro);

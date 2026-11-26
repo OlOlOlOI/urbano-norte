@@ -1,6 +1,7 @@
 'use strict';
 
 const { renderizar } = require('./template');
+const { parametrosPara } = require('./modelo-meta');
 
 /**
  * Executa uma campanha, um destinatário por vez.
@@ -10,6 +11,7 @@ const { renderizar } = require('./template');
  * @param {object} p
  * @param {Array}  p.destinatarios  [{ telefone, nome }]
  * @param {string} p.corpo          texto do modelo, com {{nome}}
+ * @param {{nome: string, idioma: string}} [p.modeloMeta] modelo aprovado pela Meta: envia por ele (obrigatório para quem não escreveu nas últimas 24 h)
  * @param {string} p.campanha       identificador da campanha
  * @param {object} p.provedor       ver provider-sim.js
  * @param {Estado} p.estado
@@ -32,10 +34,11 @@ async function executarCampanha(p) {
     if (limiteDiario && jaHoje >= limiteDiario) { resumo.parouPorLimite = true; break; }
 
     const d = destinatarios[i];
-    const texto = renderizar(corpo, { nome: d.nome });
     let res;
     try {
-      res = await provedor.enviar({ telefone: d.telefone, texto, campanha });
+      res = p.modeloMeta
+        ? await provedor.enviarModelo({ telefone: d.telefone, modelo: p.modeloMeta.nome, idioma: p.modeloMeta.idioma || 'pt_BR', parametros: parametrosPara(corpo, { nome: d.nome }), campanha })
+        : await provedor.enviar({ telefone: d.telefone, texto: renderizar(corpo, { nome: d.nome }), campanha });
     } catch (e) {
       res = { ok: false, erro: String(e && e.message || e) };
     }

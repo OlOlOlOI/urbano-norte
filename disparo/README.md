@@ -1,6 +1,6 @@
 # Disparo Urbano Norte
 
-App desktop (Windows e Mac) para campanhas de WhatsApp. **Versão atual: modo simulação** (nada é enviado de verdade).
+App desktop (Windows e Mac) para campanhas de WhatsApp. **Modo simulação por padrão**; o envio real se liga em Configurações, por computador, e só funciona com mensagens aprovadas pela Meta.
 
 ## Primeiro uso (em cada computador, 1 vez)
 1. Instale o app e abra **Ajustes**.
@@ -25,7 +25,14 @@ Dentro da pasta `disparo/`: `npm install` e `npm test` (núcleo). `npm start` ab
 Em **Configurações → WhatsApp (API oficial da Meta)** cada computador cola o *ID do número de telefone* e o *token de acesso* do painel da Meta, mais o número de quem vai testar.
 O token fica cifrado só naquele computador (nunca vai para a pasta compartilhada). O app confere com a Meta antes de salvar.
 
-Por enquanto só existe o **teste no próprio número** (texto livre ou o modelo `hello_world`). As campanhas continuam em modo simulação.
+Teste no próprio número: texto livre, o modelo `hello_world` ou (no passo 3 da campanha) a mensagem aprovada.
+
+Envio real das campanhas:
+1. Escreva a mensagem (pode usar `{{nome|passageiro}}`; a Meta não aceita a variável no começo nem no fim do texto).
+2. No passo 1 da campanha, **Aprovar na Meta** e escolha o tipo: promoção (~R$ 0,32 por mensagem entregue) ou aviso de serviço (~R$ 0,035). O Disparo cria o modelo na conta do WhatsApp sozinho.
+3. Espere aparecer **Aprovada pela Meta** (↻ Ver se já foi aprovada).
+4. Em Configurações, **Ligar o envio real** (vale só neste computador). No envio, o Disparo mostra o custo estimado e pede para digitar a quantidade de mensagens.
+Mudou o texto de uma mensagem aprovada? Ela precisa ser aprovada de novo.
 
 O provedor real está em `src/core/provider-meta.js` (Graph API v27.0). Falta para ligar as campanhas:
 - modelos (templates) aprovados pela Meta — fora da janela de 24 h o WhatsApp só aceita modelos;

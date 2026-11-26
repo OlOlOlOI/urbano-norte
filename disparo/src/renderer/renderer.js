@@ -133,6 +133,57 @@ async function previa(corpo, nome = 'Maria') {
   return r.ok ? r.dados : '';
 }
 
+/* ---------- aprovação na Meta (modelos) ---------- */
+const reais = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+// mesma regra de core/modelo-meta.js#situacao, resumida para a tela
+function situacaoMeta(m) {
+  const meta = m && m.meta;
+  if (!meta || !meta.nome) return { codigo: 'sem', texto: 'Não enviada para aprovação' };
+  if (meta.corpoEnviado !== undefined && meta.corpoEnviado !== m.corpo) return { codigo: 'mudou', texto: 'Texto mudou: aprovar de novo' };
+  const st = String(meta.status || '').toUpperCase();
+  if (st === 'APPROVED') return { codigo: 'aprovado', texto: 'Aprovada pela Meta' };
+  if (st === 'REJECTED') return { codigo: 'recusado', texto: 'Recusada pela Meta' + (meta.motivo && meta.motivo !== 'NONE' ? ` (${meta.motivo})` : '') };
+  if (st === 'PAUSED' || st === 'DISABLED') return { codigo: 'pausado', texto: 'Pausada pela Meta (baixa qualidade)' };
+  if (st === 'DELETED') return { codigo: 'sem', texto: 'Apagada na Meta: envie de novo' };
+  return { codigo: 'analise', texto: 'Em análise pela Meta' };
+}
+const seloMeta = (m) => { const sm = situacaoMeta(m); return h('span', { class: 'selo-meta ' + sm.codigo }, sm.texto); };
+
+/* Atualiza a situação das mensagens na Meta (sem travar a tela se a Meta não responder). */
+async function atualizarMeta() {
+  const r = await window.api.modelos.situacao();
+  if (r && r.ok) { S.modelos = r.dados.modelos; S.categorias = r.dados.categorias; return true; }
+  return false;
+}
+
+/* Diálogo: escolher o tipo e mandar a mensagem para a Meta aprovar. */
+function pedirAprovacao(m) {
+  return abrirDialogo((d, fechar) => {
+    const cats = S.categorias || { MARKETING: { rotulo: 'Promoção ou novidade', custo: 0.3217 }, UTILITY: { rotulo: 'Aviso de serviço (corrida, cadastro, pagamento)', custo: 0.035 } };
+    const erro = h('div', { class: 'caixa erro oculto', role: 'alert' });
+    const opcoes = Object.entries(cats).map(([cod, c], i) => {
+      const id = novoId('cat');
+      return h('label', { class: 'marcar', for: id }, h('input', { type: 'radio', name: 'categoria', id, value: cod, checked: i === 0 }),
+        `${c.rotulo} — cerca de ${reais(c.custo)} por mensagem entregue`);
+    });
+    const botao = h('button', { type: 'button', class: 'btn principal vai', onclick: async () => {
+      const categoria = (d.querySelector('input[name=categoria]:checked') || {}).value;
+      botao.disabled = true; botao.textContent = 'Enviando para a Meta…';
+      const r = await window.api.modelos.enviarMeta({ id: m.id, categoria });
+      if (r.ok) { fechar(r.dados); return; }
+      erro.textContent = r.erro; erro.classList.remove('oculto');
+      botao.disabled = false; botao.textContent = 'Enviar para aprovação';
+    } }, 'Enviar para aprovação');
+    d.append(h('h2', { id: 'dialogo-titulo' }, `Aprovar “${m.nome}” na Meta`),
+      h('p', {}, 'Para mandar mensagem a quem não falou com a Urbano Norte nas últimas 24 horas, o WhatsApp exige que o texto seja aprovado pela Meta antes. A análise costuma levar de minutos a algumas horas.'),
+      erro,
+      h('fieldset', {}, h('legend', {}, 'Que tipo de mensagem é?'), opcoes),
+      h('p', { class: 'pequeno' }, 'A Meta confere o tipo. Se uma mensagem marcada como aviso tiver tom de promoção (desconto, “aproveite”), ela muda para promoção e cobra o valor de promoção.'),
+      h('p', { class: 'pequeno' }, 'Depois de aprovada, qualquer mudança no texto precisa de nova aprovação.'),
+      h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: () => fechar(undefined) }, 'Cancelar'), botao));
+  });
+}
+
 /* Editor de mensagem. Devolve o id salvo (ou undefined se cancelou). */
 function editarMensagem(modelo) {
   const novo = !modelo;
@@ -186,7 +237,7 @@ function editarMensagem(modelo) {
       h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: inserir }, 'Inserir o nome da pessoa')),
       h('p', { class: 'pequeno' }, 'Quando a planilha não trouxer o nome, o texto usa “passageiro”.'),
       h('p', { class: 'rotulo' }, 'Como a Maria vai ver'), balao,
-      h('p', { class: 'pequeno' }, 'No envio real, este texto precisa ser igual ao modelo aprovado pelo WhatsApp.'),
+      h('p', { class: 'pequeno' }, 'Para o envio real, depois de salvar, mande a mensagem para aprovação da Meta. Se mudar o texto de uma mensagem aprovada, ela precisa ser aprovada de novo.'),
       h('div', { class: 'acoes' },
         h('button', { type: 'button', class: 'btn', onclick: () => fechar(undefined) }, 'Cancelar'),
         !novo && h('button', { type: 'button', class: 'btn perigo', onclick: excluir }, 'Excluir'),
@@ -312,6 +363,9 @@ async function telaCampanha(raiz) {
 
 async function passo1Mensagem(raiz) {
   if (!S.modelos.some((m) => m.id === S.camp.modeloId)) S.camp.modeloId = S.modelos[0].id;
+  const w = await chamar(window.api.whatsapp.ler());
+  const temWhats = Boolean(w && w.conta);
+  if (temWhats) await atualizarMeta();
   const previas = await Promise.all(S.modelos.map((m) => previa(m.corpo)));
 
   raiz.append(rota(1), h('h1', {}, 'Qual mensagem você quer enviar?'),
@@ -324,10 +378,17 @@ async function passo1Mensagem(raiz) {
       radio.addEventListener('change', () => { S.camp.modeloId = m.id; S.camp.nome = ''; });
       const trecho = previas[i].length > 160 ? previas[i].slice(0, 160) + '…' : previas[i];
       return h('div', { class: 'opcao' }, radio,
-        h('label', { for: id, class: 'conteudo' }, h('span', { class: 'titulo' }, m.nome), h('span', { class: 'trecho' }, trecho)),
-        h('button', { type: 'button', class: 'btn', 'aria-label': `Editar a mensagem ${m.nome}`, onclick: async () => { const r = await editarMensagem(m); if (r) { if (r === 'excluida') S.camp.modeloId = null; await ir('campanha'); } } }, 'Editar'));
+        h('label', { for: id, class: 'conteudo' }, h('span', { class: 'titulo' }, m.nome), h('span', { class: 'trecho' }, trecho), temWhats ? seloMeta(m) : null),
+        h('div', { class: 'botoes-opcao' },
+          temWhats && ['sem', 'mudou', 'recusado'].includes(situacaoMeta(m).codigo)
+            ? h('button', { type: 'button', class: 'btn', 'aria-label': `Enviar a mensagem ${m.nome} para aprovação da Meta`, onclick: async () => { const r = await pedirAprovacao(m); if (r) { await ir('campanha'); avisoOk(`“${m.nome}” foi para a Meta. ${r.situacao.texto}.`); } } }, 'Aprovar na Meta')
+            : null,
+          h('button', { type: 'button', class: 'btn', 'aria-label': `Editar a mensagem ${m.nome}`, onclick: async () => { const r = await editarMensagem(m); if (r) { if (r === 'excluida') S.camp.modeloId = null; await ir('campanha'); } } }, 'Editar')));
     }));
 
+  if (temWhats && S.modelos.some((m) => situacaoMeta(m).codigo === 'analise')) {
+    grupo.append(h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', onclick: async () => { await ir('campanha'); avisoOk('Situação na Meta atualizada.'); } }, '↻ Ver se já foi aprovada')));
+  }
   raiz.append(grupo, h('div', { class: 'acoes' },
     h('button', { type: 'button', class: 'btn', onclick: async () => { const id = await editarMensagem(null); if (id) { S.camp.modeloId = id; S.camp.nome = ''; await ir('campanha'); } } }, 'Escrever nova mensagem'),
     h('button', { type: 'button', class: 'btn principal vai', onclick: async () => { S.camp.passo = 2; await ir('campanha'); } }, 'Continuar')));
@@ -392,34 +453,41 @@ async function passo3Enviar(raiz, modelo) {
   const balao = h('div', { class: 'balao' });
   previa(modelo.corpo).then((t) => { balao.textContent = t; });
 
+  const sm = situacaoMeta(modelo);
+  const custo = !teste && modelo.meta && S.categorias && S.categorias[modelo.meta.categoria] ? S.categorias[modelo.meta.categoria].custo * n : null;
   raiz.append(rota(3), h('h1', {}, 'Revisar e enviar'),
+    !teste && sm.codigo !== 'aprovado' ? h('div', { class: 'caixa erro' }, h('strong', {}, 'Esta mensagem ainda não pode ir no envio real. '), `${sm.texto}. Volte ao passo 1 e use “Aprovar na Meta”.`) : null,
     h('dl', { class: 'resumo' },
       h('dt', {}, 'Mensagem'), h('dd', {}, modelo.nome),
       h('dt', {}, 'Como a Maria vai ver'), h('dd', {}, balao),
       h('dt', {}, 'Quem recebe'), h('dd', {}, `${n} ${pl(n, 'pessoa', 'pessoas')}`),
-      h('dt', {}, 'Tipo de envio'), h('dd', {}, teste ? 'Teste. Nada será enviado de verdade.' : 'Envio real')),
+      h('dt', {}, 'Tipo de envio'), h('dd', {}, teste ? 'Teste. Nada será enviado de verdade.' : 'Envio real, pelo WhatsApp da Urbano Norte'),
+      custo !== null ? h('dt', {}, 'Custo estimado') : null,
+      custo !== null ? h('dd', {}, `cerca de ${reais(custo)} (cobrado pela Meta no cartão, só das mensagens entregues)`) : null),
     ...campo('Nome da campanha', nome, 'Quem já recebeu uma campanha com este nome não recebe de novo. Para mandar a mesma mensagem outra vez a todos, mude o nome.'),
     !r.usouAceite ? h('label', { class: 'marcar', for: 'confirma-autorizacao' }, confirma, 'Confirmo que todas as pessoas desta lista autorizaram receber mensagens da Urbano Norte.') : null);
 
   // Prévia de verdade só no WhatsApp de quem está usando (a planilha nunca é usada aqui)
   const w = await chamar(window.api.whatsapp.ler());
   if (w && w.conta) {
+    const aprovado = situacaoMeta(modelo).codigo === 'aprovado';
     const btnMim = h('button', { type: 'button', class: 'btn', onclick: async () => {
       const texto = await previa(modelo.corpo, (S.ajustes.operador || '').split(' ')[0] || 'Maria');
       btnMim.disabled = true; btnMim.textContent = 'Enviando…';
-      const res = await chamar(window.api.whatsapp.teste({ tipo: 'texto', texto }));
+      const res = await chamar(window.api.whatsapp.teste(aprovado ? { tipo: 'modeloDisparo', modeloId: modelo.id } : { tipo: 'texto', texto }));
       btnMim.disabled = false; btnMim.textContent = 'Enviar só para o meu WhatsApp';
       if (res) avisoOk(`Prévia enviada só para ${res.para}. Ninguém da planilha recebeu.`);
     } }, 'Enviar só para o meu WhatsApp');
     raiz.append(h('div', { class: 'caixa ok' },
       h('strong', {}, 'Quer ver no celular antes? '),
       `Este botão manda esta mensagem só para ${w.meuNumero}, com o seu nome no lugar de {{nome}}. Ninguém da planilha recebe.`,
+      aprovado ? ' Vai pela mensagem aprovada, igual à que a planilha recebe.' : ' Como ainda não está aprovada, vai como texto livre: só chega se você escreveu para o número da empresa nas últimas 24 horas.',
       h('div', { class: 'acoes' }, btnMim)));
   }
 
   raiz.append(h('div', { class: 'acoes' },
     h('button', { type: 'button', class: 'btn', onclick: async () => { S.camp.passo = 2; await ir('campanha'); } }, 'Voltar'),
-    h('button', { type: 'button', class: 'btn principal vai', onclick: () => enviar(modelo, r, confirma) }, `Enviar para ${n} ${pl(n, 'pessoa', 'pessoas')}`)));
+    h('button', { type: 'button', class: 'btn principal vai', disabled: !teste && sm.codigo !== 'aprovado', onclick: () => enviar(modelo, r, confirma) }, `Enviar para ${n} ${pl(n, 'pessoa', 'pessoas')}`)));
 }
 
 async function enviar(modelo, publicoMostrado, confirma) {
@@ -432,7 +500,7 @@ async function enviar(modelo, publicoMostrado, confirma) {
   const n = fresco.stats.aptos;
   if (n === 0) { avisoErro('Ninguém pode receber esta campanha agora. Volte e confira a lista.'); return; }
   const mudou = n !== publicoMostrado.stats.aptos;
-  const ok = await confirmar({
+  const ok = !S.ajustes.simulacao ? await confirmarReal(modelo, n, mudou ? publicoMostrado.stats.aptos : null) : await confirmar({
     titulo: `Enviar para ${n} ${pl(n, 'pessoa', 'pessoas')}?`,
     texto: [
       S.ajustes.simulacao ? 'É um teste. Nenhuma mensagem real será enviada.' : 'Depois de começar, você só pode parar o envio. Não dá para desfazer.',
@@ -442,7 +510,7 @@ async function enviar(modelo, publicoMostrado, confirma) {
   });
   if (!ok) return;
 
-  const r = await chamar(window.api.envio.iniciar({ campanha, corpo: modelo.corpo }));
+  const r = await chamar(window.api.envio.iniciar({ campanha, corpo: modelo.corpo, modeloId: modelo.id }));
   if (!r) return;
   S.enviando = true; S.fase = 'enviando'; S.resultado = null;
   S.envio = { total: r.total, feitos: 0, campanha };
@@ -457,6 +525,23 @@ async function enviar(modelo, publicoMostrado, confirma) {
     ir('campanha');
   });
   await ir('campanha');
+}
+
+/* Trava do envio real: a pessoa digita a quantidade de mensagens para confirmar. */
+function confirmarReal(modelo, n, antes) {
+  return abrirDialogo((d, fechar) => {
+    const cat = modelo.meta && S.categorias && S.categorias[modelo.meta.categoria];
+    const campoN = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', 'aria-describedby': 'trava-ajuda' });
+    const botao = h('button', { type: 'button', class: 'btn vai perigo', disabled: true, onclick: () => fechar(true) }, `Enviar ${n} ${pl(n, 'mensagem', 'mensagens')} de verdade`);
+    campoN.addEventListener('input', () => { botao.disabled = campoN.value.replace(/\D/g, '') !== String(n); });
+    campoN.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !botao.disabled) fechar(true); });
+    d.append(h('h2', { id: 'dialogo-titulo' }, `Envio real para ${n} ${pl(n, 'pessoa', 'pessoas')}`),
+      h('p', {}, `As mensagens saem de verdade pelo WhatsApp da Urbano Norte${cat ? `, com custo estimado de ${reais(cat.custo * n)}` : ''}. Depois de começar, dá para parar, mas não dá para desfazer o que já foi enviado.`),
+      antes !== null ? h('p', {}, `O número mudou de ${antes} para ${n} porque a planilha ou o nome da campanha mudou.`) : null,
+      h('label', { for: campoN.id || (campoN.id = novoId('trava')) }, `Para confirmar, digite ${n}:`), campoN,
+      h('p', { id: 'trava-ajuda', class: 'pequeno' }, 'É a quantidade de pessoas que vão receber.'),
+      h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => fechar(false) }, 'Cancelar'), botao));
+  }).then((v) => v === true);
 }
 
 async function telaEnviando(raiz) {
@@ -590,6 +675,21 @@ async function telaConfig(raiz) {
   // WhatsApp (API oficial da Meta) — fica só neste computador
   await secaoWhatsApp(raiz);
 
+  // Envio real (por computador)
+  if (a.pronto) {
+    const real = !a.simulacao;
+    raiz.append(h('h2', {}, 'Envio real das campanhas'),
+      h('p', { class: 'apoio' }, real
+        ? 'Ligado neste computador: as campanhas saem de verdade pelo WhatsApp, só com mensagens aprovadas pela Meta.'
+        : 'Desligado: as campanhas são só um teste e nada é enviado. Ligue quando tiver uma mensagem aprovada pela Meta e o cartão cadastrado na Meta.'),
+      a.querReal && a.simulacao ? h('div', { class: 'caixa' }, 'O envio real está ligado, mas falta configurar o WhatsApp acima.') : null,
+      h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn ' + (real ? '' : 'perigo'), onclick: async () => {
+        if (!real && !(await confirmar({ titulo: 'Ligar o envio real neste computador?', texto: ['As próximas campanhas enviadas daqui vão sair de verdade e a Meta cobra cada mensagem entregue.', 'Antes de cada envio você ainda vai revisar e digitar a quantidade de mensagens para confirmar.'], sim: 'Ligar o envio real', perigo: true }))) return;
+        const r = await chamar(window.api.ajustes.modoReal(!a.querReal));
+        if (r) { await carregarBase(); await ir('config'); avisoOk(r.simulacao ? 'Envio real desligado: campanhas voltam a ser só teste.' : 'Envio real ligado neste computador.'); }
+      } }, a.querReal ? 'Desligar o envio real' : 'Ligar o envio real')));
+  }
+
   // Tamanho do texto
   const atual = lerTexto();
   const opcoes = [['normal', 'Normal'], ['grande', 'Grande'], ['enorme', 'Muito grande']];
@@ -605,13 +705,13 @@ async function telaConfig(raiz) {
 }
 
 /* WhatsApp: credenciais da API oficial e teste no próprio número.
-   Os envios de campanha continuam em modo de teste; aqui só sai mensagem para o número da própria pessoa. */
+   Aqui só sai mensagem para o número da própria pessoa; campanhas reais dependem do envio real ligado. */
 async function secaoWhatsApp(raiz) {
   const w = await chamar(window.api.whatsapp.ler());
   if (!w) return;
   raiz.append(h('h2', {}, 'WhatsApp (API oficial da Meta)'),
     h('p', { class: 'apoio' }, 'Copie os dados do painel da Meta (developers.facebook.com › seu app › WhatsApp › Configuração da API). ',
-      'Ficam guardados só neste computador, cifrados. As campanhas continuam em modo de teste: daqui só sai mensagem para o seu número.'));
+      'Ficam guardados só neste computador, cifrados. Os testes abaixo só mandam mensagem para o seu número; as campanhas só saem de verdade com o envio real ligado (mais abaixo).'));
   if (!w.protecao) { raiz.append(h('div', { class: 'caixa erro' }, 'Este computador não oferece cofre seguro, então o token não pode ser guardado.')); return; }
   if (w.conta) raiz.append(h('div', { class: 'caixa ok', role: 'status' }, h('strong', {}, 'Conectado. '), `Número da empresa: ${w.conta.numero}${w.conta.nome ? ` (${w.conta.nome})` : ''}. Seu número para testes: ${w.meuNumero}.`));
 
