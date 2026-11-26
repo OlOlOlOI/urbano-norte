@@ -396,9 +396,9 @@ async function rotaApi(request, env, caminho) {
         } else if (!pagina) {
           passos.push({ item: 'Página do Facebook ligada ao Instagram', ok: false, detalhe: lista.length ? `o token enxerga ${lista.length} página(s), mas nenhuma está ligada a esta conta do Instagram` : 'o token não enxerga nenhuma Página do Facebook (falta a permissão pages_show_list ou a Página não foi incluída ao gerar o token)' });
         } else {
-          const r = await fetch(`${GRAPH}/${pagina.id}/subscribed_apps?subscribed_fields=messages,messaging_seen,message_reactions`, { method: 'POST', headers: { Authorization: `Bearer ${pagina.access_token}` } }).then((x) => x.json()).catch(() => null);
+          const r = await fetch(`${GRAPH}/${pagina.id}/subscribed_apps?subscribed_fields=messages,message_reactions,message_reads`, { method: 'POST', headers: { Authorization: `Bearer ${pagina.access_token}` } }).then((x) => x.json()).catch(() => null);
           const ok = Boolean(r && r.success);
-          passos.push({ item: 'Página do Facebook manda as DMs do Instagram para este app', ok, detalhe: ok ? `ligada: ${pagina.name}` : (r && r.error ? explicar(r.error) + ' — o token precisa da permissão pages_manage_metadata.' : 'não consegui ligar') });
+          passos.push({ item: 'Página do Facebook manda as DMs do Instagram para este app', ok, detalhe: ok ? `ligada: ${pagina.name}` : (r && r.error ? explicar(r.error) + (r.error.code === 200 || r.error.code === 10 ? ' — o token precisa da permissão pages_manage_metadata.' : '') : 'não consegui ligar') });
         }
       }
       if (eu.ok && !igId) {
