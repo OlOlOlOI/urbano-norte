@@ -209,12 +209,12 @@ function comLinks(texto) {
 
 function bolha(m) {
   const saida = m.direcao === 'saida';
+  const story = m.tipo === 'story_mention';
   const filhos = [];
   if (saida && m.operador) filhos.push(h('div', { class: 'operador' }, m.operador));
   if (m.midia_id) {
     const imagem = (m.midia_mime || '').startsWith('image/') || m.tipo === 'image' || m.tipo === 'sticker';
     const audio = m.tipo === 'audio' || (m.midia_mime || '').startsWith('audio/');
-    const story = m.tipo === 'story_mention';
     const naTela = imagem || audio || story; // Story: foto aparece aqui; vídeo abre no programa do computador
     const ja = S.midias.get(m.midia_id);
     if (ja && ja.startsWith('data:image')) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja) })));

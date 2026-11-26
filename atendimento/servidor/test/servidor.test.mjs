@@ -401,3 +401,15 @@ test('Instagram: conversa feita só de menção no Story nem aparece', async () 
   const c = (await (await api(env, '/api/conversas')).json()).conversas;
   assert.strictEqual(c.length, 0);
 });
+
+test('conversas resolvidas há mais de 3 dias somem da lista, mas a busca ainda acha', async () => {
+  const env = ambiente();
+  await webhook(env, mensagemCliente('wamid.V', 'oi', { de: '556411110000', nome: 'Antiga' }));
+  await webhook(env, mensagemCliente('wamid.N', 'oi', { de: '556422220000', nome: 'Nova' }));
+  await api(env, '/api/conversas/556411110000/resolver', { method: 'POST' });
+  await env.DB.prepare('UPDATE conversas SET atualizada_em = ? WHERE wa_id = ?').bind(Date.now() - 4 * 24 * 3600 * 1000, '556411110000').run();
+  const todas = (await (await api(env, '/api/conversas')).json()).conversas.map((c) => c.nome);
+  assert.deepStrictEqual(todas, ['Nova']);
+  const busca = (await (await api(env, '/api/conversas?busca=Antiga')).json()).conversas.map((c) => c.nome);
+  assert.deepStrictEqual(busca, ['Antiga']);
+});

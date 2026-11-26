@@ -23,6 +23,8 @@ const GRAPH = 'https://graph.facebook.com/v27.0';
 const GRAPH_IG = 'https://graph.instagram.com/v27.0';
 const ehInstagram = (contato) => String(contato).startsWith('ig_');
 const JANELA_MS = 24 * 60 * 60 * 1000;
+// Conversas resolvidas somem da lista depois deste tempo sem novidade (continuam no banco: a busca acha, e se o cliente escrever de novo ela volta)
+const ESCONDER_RESOLVIDAS_MS = 3 * 24 * 60 * 60 * 1000;
 
 // ---------- utilidades ----------
 const json = (dados, status = 200) => new Response(JSON.stringify(dados), {
@@ -459,6 +461,7 @@ async function rotaApi(request, env, caminho) {
     const canal = url.searchParams.get('canal');
     if (canal === 'whatsapp' || canal === 'instagram') { cond.push('canal = ?'); args.push(canal); }
     if (busca) { cond.push('(nome LIKE ? OR usuario LIKE ? OR wa_id LIKE ?)'); args.push(`%${busca}%`, `%${busca.replace(/^@/, '')}%`, `%${busca.replace(/\D/g, '') || busca}%`); }
+    else { cond.push("(estado = 'aberta' OR atualizada_em > ?)"); args.push(agora() - ESCONDER_RESOLVIDAS_MS); }
     if (cond.length) sql += ' WHERE ' + cond.join(' AND ');
     sql += ' ORDER BY ultima_msg_em DESC LIMIT 300';
     const { results } = await db.prepare(sql).bind(...args).all();

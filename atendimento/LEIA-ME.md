@@ -12,7 +12,7 @@ Aba **Atendimento** do app unificado: as conversas do **WhatsApp** e as **mensag
 - Responder com texto; mostra quem respondeu e se foi enviada / entregue / lida / não entregue (com o motivo).
 - Marca como lida no celular do cliente (dois tiques azuis) ao abrir a conversa.
 - Indica a janela de 24 h do WhatsApp e bloqueia texto livre quando ela fecha.
-- Resolver / reabrir conversa (se o cliente escrever de novo, ela reabre sozinha).
+- Resolver / reabrir conversa (se o cliente escrever de novo, ela reabre sozinha). Conversas resolvidas somem da lista depois de 3 dias sem novidade (a busca ainda acha; o tempo fica em ESCONDER_RESOLVIDAS_MS no servidor).
 
 Ainda não: enviar fotos/arquivos/áudio, responder com modelo aprovado fora das 24 h, transferir conversa entre pessoas.
 
