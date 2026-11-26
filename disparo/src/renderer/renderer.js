@@ -620,8 +620,8 @@ async function secaoWhatsApp(raiz) {
   const meu = h('input', { type: 'tel', value: w.meuNumero, autocomplete: 'off', placeholder: '(64) 99999-8888' });
   raiz.append(
     ...campo('ID do número de telefone', numeroId, 'Em inglês aparece como "Phone number ID". Só números.'),
-    ...campo('Token de acesso', token, 'O token temporário do painel vale 24 horas. Depois é preciso gerar outro.'),
-    ...campo('Seu número de WhatsApp (para testes)', meu, 'No número de teste da Meta, ele precisa estar na lista "Para" do painel.'),
+    ...campo('Token de acesso', token, 'Use o token permanente do usuário do sistema (AtendimentoUN), gerado com expiração "Nunca".'),
+    ...campo('Seu número de WhatsApp (para testes)', meu, 'Quem recebe o teste. Com DDD, ex.: (64) 99999-8888.'),
     h('div', { class: 'acoes' },
       h('button', { type: 'button', class: 'btn principal', onclick: async (ev) => {
         ev.target.disabled = true; ev.target.textContent = 'Conferindo com a Meta…';
@@ -644,8 +644,7 @@ async function secaoWhatsApp(raiz) {
     if (r) avisoOk(`A Meta aceitou a mensagem para ${r.para}${r.waId ? ` (WhatsApp de destino: ${r.waId})` : ''}. Código: ${r.id || '—'}. Confira o seu WhatsApp, inclusive em Arquivadas.`);
   };
   raiz.append(h('h3', { class: 'rotulo' }, 'Testar no seu número'),
-    h('div', { class: 'caixa' }, h('strong', {}, 'Atenção: '), 'o número de teste da Meta (+1, dos EUA) não entrega mensagens para celulares do Brasil — a Meta bloqueia envio de outro país para o Brasil (erro 130497). A Meta aceita o envio, mas ele falha depois. Para testar no seu celular é preciso um número brasileiro da empresa (Etapa 2 no painel da Meta).'),
-    h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega se você mandou mensagem para o número da empresa nas últimas 24 horas. ',
+    h('p', { class: 'apoio' }, 'Regra do WhatsApp: texto livre só chega para quem mandou mensagem para o número da empresa, (64) 99905-1127, nas últimas 24 horas. A Meta aceita o envio, mas ele falha depois se a pessoa não escreveu antes. ',
       'Se nunca mandou, comece pelo modelo "hello_world" (mensagem pronta da Meta, em inglês) ou mande um "oi" para o número da empresa.'),
     ...campo('Texto do teste', texto),
     h('div', { class: 'acoes' },
