@@ -125,6 +125,13 @@ app.whenReady().then(async () => {
     const chegou = await ta.executeJavaScript("[...document.querySelectorAll('.bolha.entrada')].some(b => b.textContent.includes('Muito obrigada'))");
     conferir('atendimento: mensagem nova do cliente aparece sozinha na conversa aberta', chegou);
     await capturar('5-atendimento-conversa');
+    await ta.executeJavaScript("document.querySelector('.conversa-topo .btn-icone').click()");
+    await espera(300);
+    await ta.executeJavaScript("(() => { const c = document.querySelector('.conversa-topo input.apelido'); c.value = 'Passageira Ana (bolsa)'; c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()");
+    await espera(1500);
+    const apelido = await ta.executeJavaScript("[document.querySelector('.conversa-topo .nome').textContent, document.querySelector('.conversa-topo .numero').textContent, [...document.querySelectorAll('.lista .item-nome')].map(e => e.textContent).join('|')]");
+    conferir('atendimento: renomear contato muda o topo e a lista e mostra o nome do perfil', apelido[0] === 'Passageira Ana (bolsa)' && /no perfil: Ana Paula/.test(apelido[1]) && apelido[2].includes('Passageira Ana (bolsa)'), JSON.stringify(apelido));
+    await capturar('5b-atendimento-apelido');
     await ta.executeJavaScript("document.querySelectorAll('.lista li button')[2] && [...document.querySelectorAll('.lista li button')].find(b => b.textContent.includes('Carla')).click()");
     await espera(1200);
     const fechada = await ta.executeJavaScript("!!document.querySelector('.fechada-aviso') && !document.getElementById('texto')");

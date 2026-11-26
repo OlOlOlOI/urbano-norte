@@ -460,7 +460,7 @@ async function rotaApi(request, env, caminho) {
     if (estado === 'aberta' || estado === 'resolvida') { cond.push('estado = ?'); args.push(estado); }
     const canal = url.searchParams.get('canal');
     if (canal === 'whatsapp' || canal === 'instagram') { cond.push('canal = ?'); args.push(canal); }
-    if (busca) { cond.push('(nome LIKE ? OR usuario LIKE ? OR wa_id LIKE ?)'); args.push(`%${busca}%`, `%${busca.replace(/^@/, '')}%`, `%${busca.replace(/\D/g, '') || busca}%`); }
+    if (busca) { cond.push('(apelido LIKE ? OR nome LIKE ? OR usuario LIKE ? OR wa_id LIKE ?)'); args.push(`%${busca}%`, `%${busca}%`, `%${busca.replace(/^@/, '')}%`, `%${busca.replace(/\D/g, '') || busca}%`); }
     else { cond.push("(estado = 'aberta' OR atualizada_em > ?)"); args.push(agora() - ESCONDER_RESOLVIDAS_MS); }
     if (cond.length) sql += ' WHERE ' + cond.join(' AND ');
     sql += ' ORDER BY ultima_msg_em DESC LIMIT 300';
@@ -498,6 +498,14 @@ async function rotaApi(request, env, caminho) {
         await graph(env, `${env.PHONE_NUMBER_ID}/messages`, { method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: ultima.id }) }).catch(() => {});
       }
       return json({ ok: true });
+    }
+    if (request.method === 'POST' && acao === 'apelido') {
+      let corpo = {};
+      try { corpo = await request.json(); } catch { /* vazio */ }
+      const apelido = String(corpo.apelido ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
+      const r = await db.prepare('UPDATE conversas SET apelido = ?, atualizada_em = ? WHERE wa_id = ?').bind(apelido, agora(), waId).run();
+      if (!r.meta || !r.meta.changes) return erro(404, 'Conversa não encontrada.');
+      return json({ ok: true, apelido });
     }
     if (request.method === 'POST' && (acao === 'resolver' || acao === 'reabrir')) {
       await db.prepare('UPDATE conversas SET estado = ?, nao_lidas = CASE WHEN ? = \'resolvida\' THEN 0 ELSE nao_lidas END, atualizada_em = ? WHERE wa_id = ?')

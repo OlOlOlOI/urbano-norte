@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS conversas (
   canal TEXT NOT NULL DEFAULT 'whatsapp', -- whatsapp | instagram
   nome TEXT,                         -- nome do perfil
   usuario TEXT,                      -- @ do Instagram
+  apelido TEXT,                      -- nome dado pela equipe no Atendimento (vale mais que o do perfil)
   previa TEXT,                       -- texto curto da última mensagem
   ultima_msg_em INTEGER NOT NULL,    -- última mensagem (entrada ou saída)
   ultima_entrada_em INTEGER,         -- última mensagem DO CLIENTE: abre a janela de 24 h

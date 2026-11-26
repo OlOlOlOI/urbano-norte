@@ -413,3 +413,18 @@ test('conversas resolvidas há mais de 3 dias somem da lista, mas a busca ainda 
   const busca = (await (await api(env, '/api/conversas?busca=Antiga')).json()).conversas.map((c) => c.nome);
   assert.deepStrictEqual(busca, ['Antiga']);
 });
+
+test('apelido dado pela equipe: salva, busca, sobrevive a mensagem nova e pode ser apagado', async () => {
+  const env = ambiente();
+  await webhook(env, mensagemCliente('wamid.AP1', 'oi'));
+  let r = await (await api(env, '/api/conversas/556492937604/apelido', { method: 'POST', body: JSON.stringify({ apelido: '  Motorista   Carlos ' }) })).json();
+  assert.strictEqual(r.apelido, 'Motorista Carlos');
+  assert.strictEqual((await (await api(env, '/api/conversas?busca=carlos')).json()).conversas.length, 1);
+  await webhook(env, mensagemCliente('wamid.AP2', 'de novo'));
+  let c = (await (await api(env, '/api/conversas')).json()).conversas[0];
+  assert.strictEqual(c.apelido, 'Motorista Carlos');
+  r = await (await api(env, '/api/conversas/556492937604/apelido', { method: 'POST', body: JSON.stringify({ apelido: '' }) })).json();
+  assert.strictEqual(r.apelido, null);
+  const nada = await api(env, '/api/conversas/550000000000/apelido', { method: 'POST', body: JSON.stringify({ apelido: 'x' }) });
+  assert.strictEqual(nada.status, 404);
+});

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   lida: chamar('atendimento:lida'),
   resolver: chamar('atendimento:resolver'),
   reabrir: chamar('atendimento:reabrir'),
+  apelido: chamar('atendimento:apelido'),
   midia: chamar('atendimento:midia'),
   diagnostico: chamar('atendimento:diagnostico'),
   aoAtualizar: ouvir('atendimento:atualizou'),

@@ -76,7 +76,7 @@ async function conferirNovidades() {
     ultimaVista.set(c.wa_id, c.ultima_msg_em);
     const novaDoCliente = c.nao_lidas > 0 && c.ultima_entrada_em === c.ultima_msg_em && antes !== undefined && c.ultima_msg_em > antes;
     if (!primeiraVez && (novaDoCliente || (antes === undefined && c.nao_lidas > 0)) && !visivel() && Notification.isSupported()) {
-      const n = new Notification({ title: `Atendimento: ${(/[\p{L}\p{N}]/u.test(c.nome || '') && c.nome) || formatar(c.wa_id)}`, body: c.previa || 'Nova mensagem', silent: false });
+      const n = new Notification({ title: `Atendimento: ${c.apelido || (/[\p{L}\p{N}]/u.test(c.nome || '') && c.nome) || formatar(c.wa_id)}`, body: c.previa || 'Nova mensagem', silent: false });
       n.on('click', () => { const w = janela(); if (w) { w.show(); w.focus(); } avisar('atendimento:abrir', c.wa_id); });
       n.show();
     }
@@ -136,6 +136,7 @@ function registrarIpc() {
   h('atendimento:enviar', ({ waId, texto }) => chamarServidor(`/api/conversas/${enc(waId)}/enviar`, { metodo: 'POST', corpo: { texto: String(texto || ''), operador: lerConfig().operador || '' } }));
   h('atendimento:lida', async ({ waId }) => { await chamarServidor(`/api/conversas/${enc(waId)}/lida`, { metodo: 'POST' }); conferirNovidades(); return true; });
   h('atendimento:resolver', async ({ waId }) => { await chamarServidor(`/api/conversas/${enc(waId)}/resolver`, { metodo: 'POST' }); conferirNovidades(); return true; });
+  h('atendimento:apelido', ({ waId, apelido }) => chamarServidor(`/api/conversas/${enc(waId)}/apelido`, { metodo: 'POST', corpo: { apelido: String(apelido || '') } }));
   h('atendimento:reabrir', ({ waId }) => chamarServidor(`/api/conversas/${enc(waId)}/reabrir`, { metodo: 'POST' }));
 
   // Fotos e áudios aparecem na própria conversa; outros arquivos (PDF, vídeo) abrem no programa padrão do computador.
