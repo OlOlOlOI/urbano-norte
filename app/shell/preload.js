@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('shell', {
   aoContador: (fn) => ipcRenderer.on('shell:contador', (_e, c) => fn(c)),
   aoPainel: (fn) => ipcRenderer.on('shell:painel', (_e, p) => fn(p)),
   aoConta: (fn) => ipcRenderer.on('shell:conta', (_e, c) => fn(c)),
+  aoAtualizacao: (fn) => ipcRenderer.on('shell:atualizacao', (_e, s) => fn(s)),
+  instalarAtualizacao: () => ipcRenderer.invoke('shell:instalarAtualizacao'),
   conta: {
     estado: chamar('conta:estado'),
     situacao: chamar('conta:situacao'),

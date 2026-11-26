@@ -6,8 +6,8 @@ const { app, BrowserWindow, WebContentsView, ipcMain, Menu, shell } = require('e
 
 // A atualização automática vem PRIMEIRO e é registrada antes de carregar o resto: se uma versão sair com defeito
 // (ex.: faltar um arquivo no instalador), o app ainda procura e instala a correção sozinho.
-const { iniciarAtualizacao } = require('./atualizacao');
-app.whenReady().then(() => iniciarAtualizacao(() => { try { return janelaViva(); } catch { return null; } }));
+const atualizacao = require('./atualizacao');
+app.whenReady().then(() => atualizacao.iniciarAtualizacao(() => { try { return janelaViva(); } catch { return null; } }));
 
 const path = require('path');
 const fs = require('fs');
@@ -111,7 +111,9 @@ const janelaViva = () => (janela && !janela.isDestroyed() ? janela : null);
 
 ipcMain.handle('shell:trocar', (_e, nome) => { mostrarAba(String(nome)); return abaAtual; });
 const VERSAO = require('./package.json').version;
-ipcMain.handle('shell:info', () => ({ aba: abaAtual, versao: VERSAO, conta: conta.estado(), painel }));
+ipcMain.handle('shell:info', () => ({ aba: abaAtual, versao: VERSAO, conta: conta.estado(), painel, atualizacao: atualizacao.situacao() }));
+ipcMain.handle('shell:instalarAtualizacao', () => atualizacao.instalarAgora());
+atualizacao.aoMudar((s) => { try { if (janelaViva()) janela.webContents.send('shell:atualizacao', s); } catch { /* janela ainda não existe */ } });
 
 // ---------- login e equipe (app/conta.js) ----------
 function abrirPainel(nome) {
@@ -140,6 +142,15 @@ hConta('conta:menu', () => {
     { type: 'separator' },
     ...(e.usuario.papel === 'admin' ? [{ label: 'Equipe…', click: () => abrirPainel('equipe') }] : []),
     { label: 'Trocar minha senha…', click: () => abrirPainel('senha') },
+    { type: 'separator' },
+    ...(() => {
+      const a = atualizacao.situacao();
+      if (a.fase === 'desligada') return [{ label: `Versão ${VERSAO} · ${a.motivo || 'atualização automática desligada'}`, enabled: false }];
+      if (a.fase === 'pronta') return [{ label: `Reiniciar e instalar a versão ${a.versao}`, click: () => atualizacao.instalarAgora() }];
+      const situacaoTxt = { procurando: 'procurando…', baixando: `baixando ${a.versao} (${a.progresso}%)`, 'em-dia': 'em dia', erro: `erro: ${a.erro}` }[a.fase] || '';
+      return [{ label: `Versão ${VERSAO}${situacaoTxt ? ` · ${situacaoTxt}` : ''}`, enabled: false },
+        { label: 'Procurar atualização agora', enabled: a.fase !== 'procurando' && a.fase !== 'baixando', click: () => atualizacao.procurarAgora() }];
+    })(),
     { type: 'separator' },
     { label: 'Sair', click: () => conta.sair() },
   ]).popup({ window: janela });

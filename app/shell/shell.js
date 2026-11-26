@@ -219,11 +219,27 @@ $('#form-dlg-senha').addEventListener('submit', async (ev) => {
   } catch (e) { $('#dlg-senha-erro').textContent = e.message; }
 });
 
+// ---------- atualização (só no Windows instalado) ----------
+function mostrarAtualizacao(a) {
+  const b = $('#btn-atualizacao');
+  if (!a) return;
+  const texto = a.fase === 'baixando' ? `Baixando versão ${a.versao}… ${a.progresso}%`
+    : a.fase === 'pronta' ? `Versão ${a.versao} pronta · reiniciar`
+      : a.fase === 'erro' ? 'Atualização com erro' : '';
+  b.textContent = texto;
+  b.title = a.fase === 'erro' ? `${a.erro}\nO app tenta de novo a cada hora (ou: menu com o seu nome → Procurar atualização agora).` : a.fase === 'pronta' ? 'Clique para reiniciar e instalar agora.' : '';
+  b.disabled = a.fase !== 'pronta';
+  b.className = `atualizacao ${a.fase}${texto ? '' : ' oculto'}`;
+}
+$('#btn-atualizacao').addEventListener('click', () => window.shell.instalarAtualizacao());
+window.shell.aoAtualizacao(mostrarAtualizacao);
+
 // ---------- início ----------
-window.shell.info().then(({ aba, versao, conta: c, painel }) => {
+window.shell.info().then(({ aba, versao, conta: c, painel, atualizacao }) => {
   marcar(aba);
   $('#versao').textContent = 'v' + versao;
   $('#login-versao').textContent = `Versão ${versao}`;
   mostrarConta(c);
   mostrarPainel(painel);
+  mostrarAtualizacao(atualizacao);
 });

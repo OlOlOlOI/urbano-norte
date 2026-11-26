@@ -123,3 +123,8 @@ dialog h2 { font-family: "Outfit", system-ui, sans-serif; margin: 0 0 8px; }
 dialog label { display: block; font-weight: 600; margin: 12px 0 6px; }
 dialog input { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid #c9cfca; border-radius: 8px; }
 body.com-painel nav button[aria-selected="true"] { border-bottom-color: transparent; color: var(--texto-fraco); }
+.atualizacao { font: 600 12px/1 "Outfit", system-ui, sans-serif; border: 0; border-radius: 999px; padding: 6px 10px; margin: 12px 0 12px 8px; background: rgba(255,255,255,.08); color: var(--texto-fraco); }
+.atualizacao.pronta { background: var(--verde); color: #fff; cursor: pointer; }
+.atualizacao.pronta:hover { filter: brightness(1.1); }
+.atualizacao.erro { background: rgba(229,72,77,.18); color: #ffb3b5; }
+.atualizacao:focus-visible { outline: 2px solid var(--lima); outline-offset: 2px; }

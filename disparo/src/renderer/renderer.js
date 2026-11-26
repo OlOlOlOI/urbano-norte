@@ -918,16 +918,28 @@ async function secaoWhatsApp(raiz) {
    ===================================================================== */
 const TELAS = { campanha: telaCampanha, sair: telaSair, historico: telaHistorico, config: telaConfig };
 
+/* Histórico e descadastros ficam na pasta compartilhada: sem ela, explica e leva para configurar. */
+function telaFaltaPasta(raiz, rota) {
+  raiz.append(h('h1', {}, rota === 'historico' ? 'Histórico' : 'Quem pediu para sair'),
+    h('div', { class: 'caixa' },
+      h('p', {}, rota === 'historico'
+        ? 'O histórico de envios fica na pasta compartilhada do Disparo, e este computador ainda não escolheu a pasta.'
+        : 'A lista de quem pediu para não receber fica na pasta compartilhada do Disparo, e este computador ainda não escolheu a pasta.'),
+      h('p', {}, 'Escolha a mesma pasta que os outros computadores usam (Google Drive, OneDrive…). Depois, esta tela mostra tudo o que já foi feito.'),
+      h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn principal', onclick: () => ir('campanha') }, 'Configurar o Disparo'))));
+}
+
 async function ir(rotaNova) {
   if (S.enviando && rotaNova !== 'campanha') { avisoErro('Há um envio em andamento. Espere terminar ou pare o envio antes de sair desta tela.'); return; }
   const mudouDeTela = rotaNova !== S.rota;
   if (mudouDeTela) limparAvisos();
   await carregarBase();
-  if (!S.ajustes || !S.ajustes.pronto) { if (rotaNova === 'sair' || rotaNova === 'historico') rotaNova = 'campanha'; }
+  const semPasta = (!S.ajustes || !S.ajustes.pronto) && (rotaNova === 'sair' || rotaNova === 'historico');
   S.rota = rotaNova;
   document.querySelectorAll('#menu button').forEach((b) => { if (b.dataset.rota === rotaNova) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   const raiz = vazio($('#tela'));
-  await TELAS[rotaNova](raiz);
+  if (semPasta) telaFaltaPasta(raiz, rotaNova); // antes voltava calado para a Campanha e parecia que o botão não funcionava
+  else await TELAS[rotaNova](raiz);
   document.title = `${(raiz.querySelector('h1') || {}).textContent || 'Início'} · Disparo Urbano Norte`;
   const t = raiz.querySelector('h1');
   if (t) { t.tabIndex = -1; t.focus({ preventScroll: false }); }
