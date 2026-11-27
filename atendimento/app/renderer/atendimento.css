@@ -135,6 +135,8 @@ dialog .legenda { width: 100%; box-sizing: border-box; font: inherit; border: 1.
 dialog .arquivo-envio { padding: 12px; background: var(--fundo); border-radius: 10px; }
 dialog .erro-texto { color: #b42318; min-height: 1.2em; margin: 6px 0 0; }
 
-/* botão "Salvar" ao lado de fotos, áudios e arquivos do cliente */
-.btn.mini { padding: 4px 10px; font-size: 13px; min-height: 0; }
-.midia:has(img) { align-items: flex-end; }
+/* salvar arquivos do cliente: link discreto embaixo do áudio; só o ⬇ ao lado do "Abrir" */
+.midia .btn { white-space: nowrap; flex-shrink: 0; }
+.btn-salvar { border: 0; background: none; color: var(--texto-2); font: inherit; font-size: 13px; font-weight: 600; padding: 2px 4px; margin: -2px 0 2px; border-radius: 6px; cursor: pointer; display: block; }
+.btn-salvar:hover, .btn-salvar:focus-visible { color: var(--verde-escuro); background: var(--fundo); }
+.btn-salvar-icone { padding: 9px 12px; }

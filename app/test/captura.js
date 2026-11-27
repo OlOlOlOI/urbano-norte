@@ -174,8 +174,14 @@ app.whenReady().then(async () => {
       let sugerido = '';
       dialog.showSaveDialog = async (_w, o) => { sugerido = (o || _w).defaultPath; return { canceled: false, filePath: destino }; };
       shell.showItemInFolder = () => {};
-      await ta.executeJavaScript("[...document.querySelectorAll('.midia .btn')].find(b => b.textContent.includes('Salvar')).click()");
+      const naBolha = await ta.executeJavaScript("!!document.querySelector('.midia:has(img) button')");
+      await ta.executeJavaScript("document.querySelector('.midia img').click()");
+      await espera(400);
+      await capturar('5d-atendimento-foto-ampliada');
+      await ta.executeJavaScript("[...document.querySelectorAll('#dialogo .btn')].find(b => b.textContent.includes('Salvar')).click()");
       await espera(1500);
+      await ta.executeJavaScript("document.getElementById('dialogo').close()");
+      conferir('atendimento: foto na conversa sem botão; o Salvar fica na foto ampliada', !naBolha);
       dialog.showSaveDialog = orig; shell.showItemInFolder = origMostrar;
       const tam = fs.existsSync(destino) ? fs.statSync(destino).size : 0;
       conferir('atendimento: botão Salvar grava a foto do cliente no computador', tam > 0 && /Downloads/i.test(sugerido), `bytes=${tam} sugerido=${sugerido}`);
