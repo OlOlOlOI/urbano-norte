@@ -32,7 +32,7 @@ let janela = null;
 const telas = {};
 let abaAtual = 'sorteio';
 let vertical = false;
-let painel = null; // tela da própria barra que cobre as abas: 'login' | 'equipe' | 'senha' (null = abas)
+let painel = null; // tela da própria barra que cobre as abas: 'login' | 'equipe' | 'senha' | 'config' (null = abas)
 let naoLidas = 0; // mensagens do Atendimento ainda não lidas (contador na aba) // modo vertical do sorteio (Reels/Stories): a tela ocupa a janela toda, sem barra
 
 const pastaModulo = (nome) => path.join(app.getPath('userData'), nome);
@@ -113,6 +113,15 @@ ipcMain.handle('shell:trocar', (_e, nome) => { mostrarAba(String(nome)); return 
 const VERSAO = require('./package.json').version;
 ipcMain.handle('shell:info', () => ({ aba: abaAtual, versao: VERSAO, conta: conta.estado(), painel, atualizacao: atualizacao.situacao() }));
 ipcMain.handle('shell:instalarAtualizacao', () => atualizacao.instalarAgora());
+ipcMain.handle('shell:procurarAtualizacao', () => atualizacao.procurarAgora());
+// Configurações → "Abrir configurações do Disparo": fecha o painel, vai para a aba e abre a tela de configurações dela
+ipcMain.handle('shell:configDisparo', () => {
+  if (!conta.estado().logado) return false;
+  abrirPainel(null);
+  mostrarAba('disparo');
+  if (telas.disparo && !telas.disparo.webContents.isDestroyed()) telas.disparo.webContents.send('disparo:ir', 'config');
+  return true;
+});
 atualizacao.aoMudar((s) => { try { if (janelaViva()) janela.webContents.send('shell:atualizacao', s); } catch { /* janela ainda não existe */ } });
 
 // ---------- login e equipe (app/conta.js) ----------
@@ -133,13 +142,18 @@ hConta('conta:senha', (d) => conta.trocarSenha(d || {}));
 hConta('conta:equipe:listar', () => conta.equipe.listar());
 hConta('conta:equipe:criar', (d) => conta.equipe.criar(d || {}));
 hConta('conta:equipe:alterar', ({ id, ...d } = {}) => conta.equipe.alterar(id, d));
-hConta('conta:painel', (nome) => { if (conta.estado().logado) abrirPainel(['equipe', 'senha'].includes(nome) ? nome : null); return painel; });
+hConta('conta:diagnostico', async () => {
+  if (conta.estado().usuario?.papel !== 'admin') throw new Error('Só o administrador testa a conexão.');
+  return conta.pedir('/api/diagnostico', { metodo: 'POST' });
+});
+hConta('conta:painel', (nome) => { if (conta.estado().logado) abrirPainel(['equipe', 'senha', 'config'].includes(nome) ? nome : null); return painel; });
 hConta('conta:menu', () => {
   const e = conta.estado();
   if (!e.logado || !janelaViva()) return null;
   Menu.buildFromTemplate([
     { label: `${e.usuario.nome} (${e.usuario.usuario})`, enabled: false },
     { type: 'separator' },
+    { label: 'Configurações…', click: () => abrirPainel('config') },
     ...(e.usuario.papel === 'admin' ? [{ label: 'Equipe…', click: () => abrirPainel('equipe') }] : []),
     { label: 'Trocar minha senha…', click: () => abrirPainel('senha') },
     { type: 'separator' },

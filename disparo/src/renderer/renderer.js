@@ -951,6 +951,8 @@ document.querySelectorAll('#menu button').forEach((b) => b.addEventListener('cli
   ir(b.dataset.rota);
 }));
 
+if (window.api.aoIr) window.api.aoIr((rota) => { if (TELAS[rota]) ir(rota); });
+
 /* A planilha mudou na pasta compartilhada: avisa e recalcula se estiver montando a campanha */
 window.api.aoMudarPlanilha(async (resumo) => {
   if (S.enviando) return;

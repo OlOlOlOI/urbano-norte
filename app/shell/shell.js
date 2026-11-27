@@ -1,7 +1,7 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const botoes = [...document.querySelectorAll('[role="tab"]')];
-const PAINEIS = { login: $('#painel-login'), equipe: $('#painel-equipe'), senha: $('#painel-senha') };
+const PAINEIS = { login: $('#painel-login'), equipe: $('#painel-equipe'), senha: $('#painel-senha'), config: $('#painel-config') };
 let conta = { logado: false, usuario: null };
 
 /** As chamadas de conta voltam { ok, dados, erro }; devolve os dados ou lança o erro. */
@@ -42,7 +42,7 @@ function mostrarConta(e) {
   if (conta.logado) {
     $('#conta-nome').textContent = conta.usuario.nome.split(' ')[0];
     $('#conta-inicial').textContent = (conta.usuario.nome.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
-    btn.setAttribute('aria-label', `Conta de ${conta.usuario.nome}: equipe, senha, sair`);
+    btn.setAttribute('aria-label', `Conta de ${conta.usuario.nome}: configurações, equipe, senha, sair`);
   }
 }
 $('#btn-conta').addEventListener('click', () => window.shell.conta.menu());
@@ -55,6 +55,7 @@ function mostrarPainel(nome) {
   document.body.classList.toggle('sem-barra', nome === 'login');
   if (nome === 'login') prepararLogin();
   if (nome === 'equipe') carregarEquipe();
+  if (nome === 'config') prepararConfig();
   if (nome === 'senha') { $('#form-senha').reset(); $('#senha-erro').textContent = ''; $('#senha-atual').focus(); }
 }
 window.shell.aoPainel(mostrarPainel);
@@ -219,6 +220,53 @@ $('#form-dlg-senha').addEventListener('submit', async (ev) => {
   } catch (e) { $('#dlg-senha-erro').textContent = e.message; }
 });
 
+// ---------- configurações gerais ----------
+let ultimaAtualizacao = null;
+function textoAtualizacao(a) {
+  if (!a) return '';
+  const v = `Você está na versão ${$('#versao').textContent.replace(/^v/, '')}.`;
+  return {
+    desligada: `${v} ${a.motivo ? a.motivo.charAt(0).toUpperCase() + a.motivo.slice(1) + '.' : 'Atualização automática desligada.'}`,
+    procurando: `${v} Procurando versão nova…`,
+    'em-dia': `${v} É a mais nova.`,
+    baixando: `${v} Baixando a versão ${a.versao}… ${a.progresso}%`,
+    pronta: `${v} A versão ${a.versao} está pronta para instalar.`,
+    erro: `${v} Não deu para procurar atualização: ${a.erro}`,
+  }[a.fase] || v;
+}
+function mostrarAtualizacaoConfig(a) {
+  if (!a) return;
+  ultimaAtualizacao = a;
+  $('#cfg-atualizacao-texto').textContent = textoAtualizacao(a);
+  $('#cfg-btn-procurar').classList.toggle('oculto', a.fase === 'desligada' || a.fase === 'pronta');
+  $('#cfg-btn-procurar').disabled = a.fase === 'procurando' || a.fase === 'baixando';
+  $('#cfg-btn-instalar').classList.toggle('oculto', a.fase !== 'pronta');
+}
+function prepararConfig() {
+  const u = conta.usuario || {};
+  $('#cfg-conta-quem').textContent = u.nome ? `${u.nome} · usuário "${u.usuario}" · ${PAPEL[u.papel] || u.papel}` : '';
+  const admin = u.papel === 'admin';
+  $('#cfg-btn-equipe').classList.toggle('oculto', !admin);
+  $('#cfg-ligacao').classList.toggle('oculto', !admin);
+  $('#cfg-ligacao-passos').classList.add('oculto');
+  mostrarAtualizacaoConfig(ultimaAtualizacao);
+  $('#config-titulo').focus();
+}
+$('#cfg-btn-senha').addEventListener('click', () => window.shell.conta.painel('senha'));
+$('#cfg-btn-equipe').addEventListener('click', () => window.shell.conta.painel('equipe'));
+$('#cfg-btn-disparo').addEventListener('click', () => window.shell.configDisparo());
+$('#cfg-btn-procurar').addEventListener('click', () => window.shell.procurarAtualizacao());
+$('#cfg-btn-instalar').addEventListener('click', () => window.shell.instalarAtualizacao());
+$('#cfg-btn-ligacao').addEventListener('click', async (ev) => {
+  const lista = $('#cfg-ligacao-passos');
+  let passos;
+  try { passos = (await ocupado(ev.currentTarget, 'Testando com a Meta…', () => chamar(window.shell.conta.diagnostico()))).passos || []; } catch (e) {
+    passos = [{ item: 'Servidor do Atendimento', ok: false, detalhe: e.message }];
+  }
+  lista.replaceChildren(...passos.map((p) => el('li', { class: p.ok ? 'ok' : 'falha' }, el('strong', {}, (p.ok ? '✓ ' : '✗ ') + p.item), el('div', {}, p.detalhe || ''))));
+  lista.classList.remove('oculto');
+});
+
 // ---------- atualização (só no Windows instalado) ----------
 function mostrarAtualizacao(a) {
   const b = $('#btn-atualizacao');
@@ -232,7 +280,7 @@ function mostrarAtualizacao(a) {
   b.className = `atualizacao ${a.fase}${texto ? '' : ' oculto'}`;
 }
 $('#btn-atualizacao').addEventListener('click', () => window.shell.instalarAtualizacao());
-window.shell.aoAtualizacao(mostrarAtualizacao);
+window.shell.aoAtualizacao((a) => { mostrarAtualizacao(a); mostrarAtualizacaoConfig(a); });
 
 // ---------- início ----------
 window.shell.info().then(({ aba, versao, conta: c, painel, atualizacao }) => {
@@ -242,4 +290,5 @@ window.shell.info().then(({ aba, versao, conta: c, painel, atualizacao }) => {
   mostrarConta(c);
   mostrarPainel(painel);
   mostrarAtualizacao(atualizacao);
+  mostrarAtualizacaoConfig(atualizacao);
 });

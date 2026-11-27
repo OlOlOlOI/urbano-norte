@@ -21,4 +21,5 @@ contextBridge.exposeInMainWorld('api', {
   aoMudarPlanilha: ouvir('planilha-mudou'),
   aoProgredir: ouvir('envio:progresso'),
   aoTerminar: ouvir('envio:fim'),
+  aoIr: ouvir('disparo:ir'), // app unificado: Configurações → abrir as configurações do Disparo
 });

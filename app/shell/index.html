@@ -110,6 +110,47 @@
     </div>
   </main>
 
+  <!-- Configurações gerais (menu com o nome da pessoa → Configurações) -->
+  <main id="painel-config" class="painel oculto" aria-labelledby="config-titulo">
+    <div class="conteudo medio">
+      <div class="topo">
+        <h1 id="config-titulo" tabindex="-1">Configurações</h1>
+        <button type="button" class="btn btn-voltar">← Voltar ao app</button>
+      </div>
+
+      <section class="bloco" aria-labelledby="cfg-conta-titulo">
+        <h2 id="cfg-conta-titulo">Sua conta</h2>
+        <p id="cfg-conta-quem" class="apoio"></p>
+        <div class="acoes-bloco">
+          <button type="button" id="cfg-btn-senha" class="btn">Trocar minha senha</button>
+          <button type="button" id="cfg-btn-equipe" class="btn oculto">Equipe</button>
+        </div>
+      </section>
+
+      <section id="cfg-ligacao" class="bloco oculto" aria-labelledby="cfg-ligacao-titulo">
+        <h2 id="cfg-ligacao-titulo">WhatsApp e Instagram</h2>
+        <p class="apoio">Confere se o servidor do Atendimento está recebendo e mandando mensagens pela Meta. Só o administrador vê.</p>
+        <div class="acoes-bloco"><button type="button" id="cfg-btn-ligacao" class="btn">Testar conexão</button></div>
+        <ul id="cfg-ligacao-passos" class="passos oculto" aria-live="polite"></ul>
+      </section>
+
+      <section class="bloco" aria-labelledby="cfg-disparo-titulo">
+        <h2 id="cfg-disparo-titulo">Disparo</h2>
+        <p class="apoio">Pasta compartilhada, planilha, envio real e limites ficam nas configurações do Disparo.</p>
+        <div class="acoes-bloco"><button type="button" id="cfg-btn-disparo" class="btn">Abrir configurações do Disparo</button></div>
+      </section>
+
+      <section class="bloco" aria-labelledby="cfg-atualizacao-titulo">
+        <h2 id="cfg-atualizacao-titulo">Atualização</h2>
+        <p id="cfg-atualizacao-texto" class="apoio" aria-live="polite"></p>
+        <div class="acoes-bloco">
+          <button type="button" id="cfg-btn-procurar" class="btn">Procurar atualização agora</button>
+          <button type="button" id="cfg-btn-instalar" class="btn principal oculto">Reiniciar e instalar</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
   <!-- Caixa de diálogo do painel Equipe (nova senha de alguém) -->
   <dialog id="dlg-senha" aria-labelledby="dlg-senha-titulo">
     <form id="form-dlg-senha" method="dialog">

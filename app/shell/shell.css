@@ -128,3 +128,14 @@ body.com-painel nav button[aria-selected="true"] { border-bottom-color: transpar
 .atualizacao.pronta:hover { filter: brightness(1.1); }
 .atualizacao.erro { background: rgba(229,72,77,.18); color: #ffb3b5; }
 .atualizacao:focus-visible { outline: 2px solid var(--lima); outline-offset: 2px; }
+
+/* Configurações gerais */
+.conteudo.medio { max-width: 680px; }
+.bloco { background: #fff; border: 1px solid #d8ddd9; border-radius: 12px; padding: 4px 20px 18px; margin-top: 16px; }
+.bloco h2 { margin-top: 16px; }
+.acoes-bloco { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.passos { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+.passos li { border-left: 4px solid var(--verde); padding: 6px 10px; background: #f6f8f6; border-radius: 6px; }
+.passos li.falha { border-left-color: #b42318; }
+.passos li div { color: #555; font-size: 14px; margin-top: 2px; }
+#config-titulo:focus { outline: none; }

@@ -140,3 +140,10 @@ dialog .erro-texto { color: #b42318; min-height: 1.2em; margin: 6px 0 0; }
 .btn-salvar { border: 0; background: none; color: var(--texto-2); font: inherit; font-size: 13px; font-weight: 600; padding: 2px 4px; margin: -2px 0 2px; border-radius: 6px; cursor: pointer; display: block; }
 .btn-salvar:hover, .btn-salvar:focus-visible { color: var(--verde-escuro); background: var(--fundo); }
 .btn-salvar-icone { padding: 9px 12px; }
+
+/* filtro de canal com o ícone do WhatsApp e do Instagram */
+.filtros.canais button { display: flex; align-items: center; justify-content: center; }
+.icone-canal { width: 20px; height: 20px; fill: currentColor; display: block; }
+.filtros.canais .canal-whatsapp { color: #1da851; }
+.filtros.canais .canal-instagram { color: #d62976; }
+.filtros.canais button[aria-pressed="true"].canal-whatsapp, .filtros.canais button[aria-pressed="true"].canal-instagram { color: #fff; }

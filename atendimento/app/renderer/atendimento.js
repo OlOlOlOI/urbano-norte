@@ -171,6 +171,18 @@ function verImagem(src, m) {
   d.showModal();
 }
 
+/* Ícones dos canais (desenho próprio, cor pelo CSS via currentColor) */
+const ICONES = {
+  whatsapp: '<path d="M12 2.6a9.4 9.4 0 0 0-8.1 14.2L2.6 21.4l4.7-1.2A9.4 9.4 0 1 0 12 2.6zm0 1.8a7.6 7.6 0 1 1-3.9 14.1l-.3-.2-2.6.7.7-2.5-.2-.3A7.6 7.6 0 0 1 12 4.4z"/><path d="M9.1 7.3c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.3.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.9 4.5 4 2.2.9 2.7.7 3.2.7.5-.1 1.6-.7 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3l-1.9-.9c-.3-.1-.5-.1-.7.1l-.8 1c-.2.2-.3.2-.6.1-.3-.1-1.2-.4-2.2-1.4-.8-.7-1.4-1.6-1.5-1.9-.2-.3 0-.4.1-.6l.4-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2z"/>',
+  instagram: '<path d="M12 2.8c2.5 0 2.8 0 3.8.1 2.5.1 3.7 1.3 3.8 3.8.1 1 .1 1.3.1 3.8v3c0 2.5 0 2.8-.1 3.8-.1 2.5-1.3 3.7-3.8 3.8-1 .1-1.3.1-3.8.1s-2.8 0-3.8-.1c-2.5-.1-3.7-1.3-3.8-3.8-.1-1-.1-1.3-.1-3.8v-3c0-2.5 0-2.8.1-3.8.1-2.5 1.3-3.7 3.8-3.8 1-.1 1.3-.1 3.8-.1zm0-1.8c-2.6 0-2.9 0-3.9.1-3.4.2-5.4 2.1-5.6 5.6C2.4 7.7 2.4 8 2.4 12s0 4.3.1 5.3c.2 3.4 2.1 5.4 5.6 5.6 1 .1 1.3.1 3.9.1s2.9 0 3.9-.1c3.4-.2 5.4-2.1 5.6-5.6.1-1 .1-1.3.1-5.3s0-4.3-.1-5.3c-.2-3.4-2.1-5.4-5.6-5.6-1-.1-1.3-.1-3.9-.1z"/><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 8.2a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4z"/><circle cx="17.3" cy="6.7" r="1.2"/>',
+};
+function iconeCanal(canal) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('class', 'icone-canal');
+  s.innerHTML = ICONES[canal]; // texto fixo deste arquivo
+  return s;
+}
+
 /* ---------- painel ---------- */
 function telaPainel() {
   const raiz = limpar($('#raiz'));
@@ -180,15 +192,16 @@ function telaPainel() {
   const filtros = [['aberta', 'Abertas'], ['resolvida', 'Resolvidas'], ['todas', 'Todas']].map(([v, rot]) =>
     h('button', { type: 'button', 'aria-pressed': String(S.filtro === v), onclick: () => { S.filtro = v; telaPainel(); carregarLista(); } }, rot));
   const canais = [['', 'Todos'], ['whatsapp', 'WhatsApp'], ['instagram', 'Instagram']].map(([v, rot]) =>
-    h('button', { type: 'button', 'aria-pressed': String(S.canal === v), onclick: () => { S.canal = v; telaPainel(); carregarLista(); } }, rot));
+    h('button', { type: 'button', class: v ? `canal-${v}` : null, 'aria-pressed': String(S.canal === v), 'aria-label': v ? `Só ${rot}` : 'Todos os canais', title: v ? `Só ${rot}` : 'Todos os canais',
+      onclick: () => { S.canal = v; telaPainel(); carregarLista(); } }, v ? iconeCanal(v) : rot));
   raiz.append(h('div', { class: 'painel' },
     h('aside', { class: 'lado', 'aria-label': 'Conversas' },
       h('div', { class: 'lado-topo' },
         h('div', { class: 'lado-titulo' }, h('h1', {}, 'Atendimento'),
           h('span', {},
             h('button', { type: 'button', class: 'btn discreto', id: 'btn-atualizar', title: 'Buscar mensagens novas agora (F5)', onclick: atualizarAgora }, '↻ Atualizar'),
-            !S.cfg.porConta ? h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar')
-              : S.cfg.admin ? h('button', { type: 'button', class: 'btn discreto', title: 'Conferir a ligação com o WhatsApp (só o administrador)', onclick: telaConfig }, 'WhatsApp') : null)),
+            // no app unificado, o teste de conexão fica em Configurações (menu com o nome da pessoa)
+            !S.cfg.porConta ? h('button', { type: 'button', class: 'btn discreto', title: 'Configurar o Atendimento', onclick: telaConfig }, 'Configurar') : null)),
         h('div', { class: 'filtros', role: 'group', 'aria-label': 'Mostrar' }, filtros),
         h('div', { class: 'filtros canais', role: 'group', 'aria-label': 'Canal' }, canais),
         busca),

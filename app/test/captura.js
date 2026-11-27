@@ -128,7 +128,7 @@ app.whenReady().then(async () => {
     conferir('atendimento: lista WhatsApp e Instagram juntos, mais recente primeiro', JSON.stringify(nomes) === JSON.stringify(['Bia Souza', 'João Victor', 'Ana Paula', 'Carla']), JSON.stringify(nomes));
     const selos = await ta.executeJavaScript("[...document.querySelectorAll('.lista .canal')].map(e => e.textContent).join(',')");
     conferir('atendimento: selo do canal em cada conversa', selos === 'IG,WA,WA,WA', selos);
-    await ta.executeJavaScript("[...document.querySelectorAll('.filtros.canais button')].find(b => b.textContent === 'Instagram').click()");
+    await ta.executeJavaScript("[...document.querySelectorAll('.filtros.canais button')].find(b => b.classList.contains('canal-instagram')).click()");
     await espera(1200);
     const soIg = await ta.executeJavaScript("[...document.querySelectorAll('.item-nome')].map(e => e.textContent).join(',')");
     conferir('atendimento: filtro só Instagram', soIg === 'Bia Souza', soIg);
@@ -234,6 +234,22 @@ app.whenReady().then(async () => {
     const depois = principal.janela().getContentSize();
     const b2 = t.sorteio.getBounds();
     conferir('saiu do vertical: tamanho e barra voltaram', depois[0] === antes[0] && depois[1] === antes[1] && b2.y === 48, `${antes} -> ${depois}, y=${b2.y}`);
+
+    // ---------- configurações gerais ----------
+    conferir('atendimento: sem o botão "WhatsApp" no topo (foi para Configurações)', !(await ta.executeJavaScript("[...document.querySelectorAll('.lado-titulo button')].some(b => b.textContent.trim() === 'WhatsApp')")));
+    conferir('atendimento: filtro de canal com ícones', await ta.executeJavaScript("document.querySelectorAll('.filtros.canais svg.icone-canal').length === 2"));
+    await shellJs("window.shell.conta.painel('config')");
+    await espera(800);
+    conferir('configurações: o painel cobre as abas', await visivelNoShell('#painel-config') && principal.painel() === 'config');
+    await shellJs("document.getElementById('cfg-btn-ligacao').click()");
+    await espera(2500);
+    const passosCfg = await shellJs("document.getElementById('cfg-ligacao-passos').textContent");
+    conferir('configurações: testar conexão mostra o resultado', passosCfg.length > 0, passosCfg.slice(0, 90));
+    await capturar('6b-configuracoes');
+    await shellJs("document.getElementById('cfg-btn-disparo').click()");
+    await espera(1500);
+    const rotaDisparo = await t.disparo.webContents.executeJavaScript("(document.querySelector('#tela h1') || {}).textContent || ''");
+    conferir('configurações: botão do Disparo abre as configurações dele', principal.painel() === null && principal.aba() === 'disparo' && rotaDisparo === 'Configurações', `${principal.aba()} / ${rotaDisparo}`);
 
     // ---------- equipe ----------
     await shellJs("window.shell.conta.painel('equipe')");

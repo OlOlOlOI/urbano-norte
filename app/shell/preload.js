@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('shell', {
   aoConta: (fn) => ipcRenderer.on('shell:conta', (_e, c) => fn(c)),
   aoAtualizacao: (fn) => ipcRenderer.on('shell:atualizacao', (_e, s) => fn(s)),
   instalarAtualizacao: () => ipcRenderer.invoke('shell:instalarAtualizacao'),
+  procurarAtualizacao: () => ipcRenderer.invoke('shell:procurarAtualizacao'),
+  configDisparo: () => ipcRenderer.invoke('shell:configDisparo'),
   conta: {
     estado: chamar('conta:estado'),
     situacao: chamar('conta:situacao'),
@@ -21,6 +23,7 @@ contextBridge.exposeInMainWorld('shell', {
     senha: chamar('conta:senha'),
     menu: chamar('conta:menu'),
     painel: chamar('conta:painel'),
+    diagnostico: chamar('conta:diagnostico'),
     equipe: { listar: chamar('conta:equipe:listar'), criar: chamar('conta:equipe:criar'), alterar: chamar('conta:equipe:alterar') },
   },
 });
