@@ -149,10 +149,24 @@ function confirmar(titulo, texto, sim) {
   });
 }
 
-function verImagem(src) {
+async function salvarMidia(m, botao) {
+  if (botao) { botao.disabled = true; }
+  const r = await chamar(window.api.salvarMidia({ midiaId: m.midia_id, nome: m.midia_nome, tipoMsg: m.tipo }));
+  if (botao) { botao.disabled = false; }
+  if (r && r.salvo) aviso('Arquivo salvo no computador.');
+}
+
+function botaoSalvar(m) {
+  const b = h('button', { type: 'button', class: 'btn mini', title: 'Salvar no computador', 'aria-label': 'Salvar no computador', onclick: () => salvarMidia(m, b) }, '⬇ Salvar');
+  return b;
+}
+
+function verImagem(src, m) {
   const d = limpar($('#dialogo'));
   d.append(h('img', { src, alt: 'Foto enviada pelo cliente' }),
-    h('div', { class: 'acoes' }, h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => d.close() }, 'Fechar')));
+    h('div', { class: 'acoes' },
+      m ? h('button', { type: 'button', class: 'btn', onclick: (e) => salvarMidia(m, e.currentTarget) }, '⬇ Salvar no computador') : null,
+      h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => d.close() }, 'Fechar')));
   d.showModal();
 }
 
@@ -235,8 +249,8 @@ function bolha(m) {
     const audio = m.tipo === 'audio' || (m.midia_mime || '').startsWith('audio/');
     const naTela = imagem || audio || story; // Story: foto aparece aqui; vídeo abre no programa do computador
     const ja = S.midias.get(m.midia_id);
-    if (ja && ja.startsWith('data:image')) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja) })));
-    else if (ja && ja.startsWith('data:audio')) filhos.push(h('div', { class: 'midia' }, h('audio', { src: ja, controls: true, preload: 'metadata', 'aria-label': 'Áudio do cliente' })));
+    if (ja && ja.startsWith('data:image')) filhos.push(h('div', { class: 'midia' }, h('img', { src: ja, alt: m.texto || 'Foto', onclick: () => verImagem(ja, m) }), botaoSalvar(m)));
+    else if (ja && ja.startsWith('data:audio')) filhos.push(h('div', { class: 'midia' }, h('audio', { src: ja, controls: true, preload: 'metadata', 'aria-label': 'Áudio do cliente' }), botaoSalvar(m)));
     else {
       const rotulo = story ? '📣 Story' : { image: '📷 Foto', sticker: 'Figurinha', audio: '🎤 Áudio', video: '🎬 Vídeo', document: `📄 ${m.midia_nome || 'Documento'}` }[m.tipo] || '📎 Arquivo';
       const textoBotao = imagem ? 'Ver foto' : audio ? '▶ Ouvir' : story ? 'Ver Story' : 'Abrir';
@@ -246,7 +260,7 @@ function bolha(m) {
         botao.disabled = false; botao.textContent = textoBotao;
         if (r && r.dataUrl) { S.midias.set(m.midia_id, r.dataUrl); desenharMensagens(false); }
       } }, textoBotao);
-      filhos.push(h('div', { class: 'midia' }, rotulo, botao));
+      filhos.push(h('div', { class: 'midia' }, rotulo, botao, botaoSalvar(m)));
     }
   }
   if (m.texto) filhos.push(h('div', {}, comLinks(story ? '📣 ' + m.texto : m.texto)));

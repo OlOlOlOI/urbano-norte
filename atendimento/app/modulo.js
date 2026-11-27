@@ -174,25 +174,46 @@ function registrarIpc() {
   h('atendimento:reabrir', ({ waId }) => chamarServidor(`/api/conversas/${enc(waId)}/reabrir`, { metodo: 'POST' }));
 
   // Fotos e áudios aparecem na própria conversa; outros arquivos (PDF, vídeo) abrem no programa padrão do computador.
-  h('atendimento:midia', async ({ midiaId, nome, abrir, tipoMsg }) => {
+  async function baixarMidia(midiaId, tipoMsg) {
     const id = String(midiaId || '').replace(/[^\w-]/g, '');
     const r = await chamarServidor(`/api/midia/${id}`, { binario: true });
     if (!r.bytes) throw new Error('Não foi possível baixar o arquivo.');
     // vale o que o arquivo é de verdade (o Instagram às vezes declara tipo genérico ou errado); sem reconhecer, fica o declarado
     const pelosBytes = tipoPelosBytes(r.bytes, tipoMsg);
     if (pelosBytes) r.tipo = pelosBytes;
+    r.id = id;
+    return r;
+  }
+  function nomeDoArquivo(r, nome) {
+    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/mpeg': '.mp3', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/webm': '.webm', 'video/mp4': '.mp4', 'video/webm': '.webm', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }[String(r.tipo || '').split(';')[0].trim()] || '.bin';
+    const seguro = String(nome || `arquivo-${r.id}`).replace(/[^\w.\- ]/g, '_').slice(0, 80);
+    return seguro.includes('.') ? seguro : seguro + ext;
+  }
+
+  // Fotos e áudios aparecem na própria conversa; outros arquivos (PDF, vídeo) abrem no programa padrão do computador.
+  h('atendimento:midia', async ({ midiaId, nome, abrir, tipoMsg }) => {
+    const r = await baixarMidia(midiaId, tipoMsg);
     if (!abrir && /^(image|audio)\//.test(r.tipo) && r.bytes.length < 16 * 1024 * 1024) {
       return { dataUrl: `data:${r.tipo};base64,${r.bytes.toString('base64')}` };
     }
-    const ext = { 'application/pdf': '.pdf', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/mpeg': '.mp3', 'audio/aac': '.aac', 'audio/wav': '.wav', 'audio/webm': '.webm', 'video/mp4': '.mp4', 'video/webm': '.webm', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }[r.tipo.split(';')[0].trim()] || '.bin';
-    const seguro = String(nome || `arquivo-${id}`).replace(/[^\w.\- ]/g, '_').slice(0, 80);
     const pasta = path.join(app.getPath('temp'), 'atendimento-urbano-norte');
     fs.mkdirSync(pasta, { recursive: true });
-    const alvo = path.join(pasta, seguro.includes('.') ? seguro : seguro + ext);
+    const alvo = path.join(pasta, nomeDoArquivo(r, nome));
     fs.writeFileSync(alvo, r.bytes);
     const falha = await shell.openPath(alvo);
     if (falha) throw new Error(falha);
     return { aberto: true };
+  });
+
+  // Salvar foto, áudio ou arquivo do cliente onde a pessoa escolher (padrão: Downloads).
+  h('atendimento:salvarMidia', async ({ midiaId, nome, tipoMsg }) => {
+    const r = await baixarMidia(midiaId, tipoMsg);
+    const sugerido = nomeDoArquivo(r, nome || `${{ image: 'foto', sticker: 'figurinha', audio: 'audio', video: 'video' }[tipoMsg] || 'arquivo'}-${r.id.slice(-8)}`);
+    const escolha = await dialog.showSaveDialog(janela() || undefined, { title: 'Salvar no computador', defaultPath: path.join(app.getPath('downloads'), sugerido) });
+    if (escolha.canceled || !escolha.filePath) return null;
+    fs.writeFileSync(escolha.filePath, r.bytes);
+    shell.showItemInFolder(escolha.filePath);
+    return { salvo: escolha.filePath };
   });
 
   // Foto (JPG/PNG até 5 MB) ou PDF (até 16 MB) para o cliente. Vem do botão 📎 (escolher=true) ou colado na resposta (bytes).

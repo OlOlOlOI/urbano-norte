@@ -166,6 +166,20 @@ app.whenReady().then(async () => {
     await espera(1200);
     const temFoto = await ta.executeJavaScript("!!document.querySelector('.midia img')");
     conferir('atendimento: foto do cliente aparece na conversa', temFoto);
+    // salvar a foto no computador: troca a caixa "Salvar como" por um caminho temporário
+    {
+      const { dialog, shell } = require('electron');
+      const destino = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'un-salvar-')), 'foto.jpg');
+      const [orig, origMostrar] = [dialog.showSaveDialog, shell.showItemInFolder];
+      let sugerido = '';
+      dialog.showSaveDialog = async (_w, o) => { sugerido = (o || _w).defaultPath; return { canceled: false, filePath: destino }; };
+      shell.showItemInFolder = () => {};
+      await ta.executeJavaScript("[...document.querySelectorAll('.midia .btn')].find(b => b.textContent.includes('Salvar')).click()");
+      await espera(1500);
+      dialog.showSaveDialog = orig; shell.showItemInFolder = origMostrar;
+      const tam = fs.existsSync(destino) ? fs.statSync(destino).size : 0;
+      conferir('atendimento: botão Salvar grava a foto do cliente no computador', tam > 0 && /Downloads/i.test(sugerido), `bytes=${tam} sugerido=${sugerido}`);
+    }
     await ta.executeJavaScript("(() => { const t = document.getElementById('texto'); t.value = 'Oi Ana! Já falamos com o motorista, ele guardou sua bolsa. Pode buscar hoje às 18h.'; document.getElementById('btn-enviar').click(); })()");
     await espera(1500);
     const ultima = await ta.executeJavaScript("(() => { const b = [...document.querySelectorAll('.bolha.saida')].pop(); return b ? b.textContent : ''; })()");

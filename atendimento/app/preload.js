@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   reabrir: chamar('atendimento:reabrir'),
   apelido: chamar('atendimento:apelido'),
   midia: chamar('atendimento:midia'),
+  salvarMidia: chamar('atendimento:salvarMidia'),
   diagnostico: chamar('atendimento:diagnostico'),
   escolherArquivo: chamar('atendimento:escolherArquivo'),
   enviarArquivo: chamar('atendimento:enviarArquivo'),
